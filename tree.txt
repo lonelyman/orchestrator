@@ -1,0 +1,41 @@
+.
+├── cmd
+│   └── server
+│       └── main.go
+├── config
+│   └── config.go
+├── docker
+│   └── docker-compose.yml
+├── enterprise-ai-orchestrator.md
+├── go.mod
+├── go.sum
+├── internal
+│   ├── core
+│   │   ├── mcp
+│   │   │   └── executor.go
+│   │   ├── orchestrator
+│   │   │   └── orchestrator.go
+│   │   └── rag
+│   │       └── rag.go
+│   ├── domain
+│   │   ├── models
+│   │   │   ├── chat.go
+│   │   │   ├── document.go
+│   │   │   └── mcp.go
+│   │   └── ports
+│   │       ├── embedder.go
+│   │       ├── llm.go
+│   │       ├── mcp.go
+│   │       └── vector.go
+│   └── infrastructure
+│       ├── embedder
+│       │   └── nomic.go
+│       ├── llm
+│       │   └── ollama.go
+│       ├── mcp
+│       │   └── sqlserver.go
+│       └── vector
+│           └── pgvector.go
+└── tree.txt
+
+18 directories, 21 files
