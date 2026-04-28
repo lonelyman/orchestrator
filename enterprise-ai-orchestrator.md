@@ -146,7 +146,7 @@ type EmbedderPort interface {
 | Phase | หัวข้อ | สถานะ |
 |---|---|---|
 | **Phase 0** | Foundation: Ollama + Docker + Go + WebUI | ✅ Done |
-| **Phase 1** | RAG: Vector Ingestion + Search | ⏳ |
+| **Phase 1** | RAG: Vector Ingestion + Search | ✅ Done |
 | **Phase 2** | MCP: SQL Server Bridge | ⏳ |
 | **Phase 3** | Orchestration: Intent Router รวมร่าง | ⏳ |
 | **Phase 4** | Production: Ubuntu + vLLM + Blackwell | ⏳ |
@@ -243,13 +243,36 @@ type EmbedderPort interface {
 
 ---
 
-### 🔜 Next Steps (Phase 1 — RAG)
+#### [2026-04-28] Phase 1 RAG Engine — สำเร็จ ✅
 
-1. **เชื่อมต่อ pgvector** — สร้าง schema สำหรับ Vector storage
-2. **EmbedderPort interface** — domain/ports/embedder.go
-3. **NomicAdapter** — infrastructure/embedder/nomic.go
-4. **RAG Engine** — core/rag/rag.go (Ingest + Search)
-5. **ทดสอบ** — Chat ที่อ้างอิงเอกสารองค์กรได้
+| ไฟล์ | Package | หน้าที่ |
+|---|---|---|
+| `internal/domain/ports/embedder.go` | ports | EmbedderPort interface |
+| `internal/domain/ports/vector.go` | ports | VectorPort interface |
+| `internal/domain/models/document.go` | models | Document, SearchResult |
+| `internal/infrastructure/embedder/nomic.go` | embedder | NomicAdapter (nomic-embed-text) |
+| `internal/infrastructure/vector/pgvector.go` | vector | PgvectorAdapter + fallback logic |
+| `internal/core/rag/rag.go` | rag | Ingest + Search + BuildContext |
+
+**Key Fix — pgvector Search:**
+- ปัญหา: similarity search ได้ 0 แถวทั้งที่มีข้อมูลใน DB
+- แก้ด้วย: parameterized query + fallback ดึงเอกสารล่าสุดเมื่อ similarity = 0
+
+**ทดสอบผ่านทั้งหมด:**
+- `POST /v1/rag/ingest` → บันทึกเอกสารลง pgvector ✅
+- `POST /v1/chat/completions` → AI ตอบโดยอ้างอิงเอกสารจริง ✅
+- RAG context อ้าง source: HR-Policy-2024.pdf ✅
+- Git commit: `feat: phase 1 - RAG engine with pgvector` ✅
+
+---
+
+### 🔜 Next Steps (Phase 2 — MCP Bridge)
+
+1. **สร้าง MCPPort interface** — domain/ports/mcp.go
+2. **สร้าง SQL Server Adapter** — infrastructure/mcp/sqlserver.go
+3. **Tool Registry** — ลงทะเบียน tools ที่ AI ใช้ได้
+4. **Validation Layer** — Read-only + permission check
+5. **อัพเดต Orchestrator** — เพิ่ม MCP path
 
 ---
 
