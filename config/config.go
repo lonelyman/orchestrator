@@ -1,8 +1,6 @@
 package config
 
-import (
-	"os"
-)
+import "os"
 
 // AppConfig เก็บ configuration ทั้งหมดของระบบ
 type AppConfig struct {
@@ -14,6 +12,13 @@ type AppConfig struct {
 	LLMHost    string
 	LLMPort    string
 	LLMModel   string
+
+	// Database
+	DBHost string
+	DBPort string
+	DBName string
+	DBUser string
+	DBPass string
 
 	// System Prompt
 	SystemPrompt string
@@ -27,6 +32,11 @@ func Load() *AppConfig {
 		LLMHost:    getEnv("LLM_HOST", "localhost"),
 		LLMPort:    getEnv("LLM_PORT", "11434"),
 		LLMModel:   getEnv("LLM_MODEL", "qwen2.5:7b"),
+		DBHost:     getEnv("DB_HOST", "localhost"),
+		DBPort:     getEnv("DB_PORT", "5432"),
+		DBName:     getEnv("DB_NAME", "orchestrator"),
+		DBUser:     getEnv("DB_USER", "orchestrator"),
+		DBPass:     getEnv("DB_PASS", "changeme"),
 		SystemPrompt: getEnv("SYSTEM_PROMPT",
 			"You are a helpful enterprise AI assistant. You must always respond in Thai language only. Never use Chinese, English, or any other language. Thai language only."),
 	}
