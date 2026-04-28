@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: orchestrator-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: orchestrator
+      POSTGRES_USER: orchestrator
+      POSTGRES_PASSWORD: changeme
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: orchestrator-webui
+    restart: unless-stopped
+    environment:
+      OPENAI_API_BASE_URL: http://host.docker.internal:11434/v1
+      OPENAI_API_KEY: ollama
+    volumes:
+      - webui_data:/app/backend/data
+    ports:
+      - "53000:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  postgres_data:
+  webui_data:
