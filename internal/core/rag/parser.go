@@ -1,16 +1,14 @@
 package rag
 
 import (
-	"bytes"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/ledongthuc/pdf"
 )
 
-// Parse อ่านไฟล์และแปลงเป็น text
 func Parse(filename string, r io.Reader) (string, error) {
 	ext := strings.ToLower(filepath.Ext(filename))
 
@@ -24,7 +22,6 @@ func Parse(filename string, r io.Reader) (string, error) {
 	}
 }
 
-// parsePlainText อ่านไฟล์ text ธรรมดา
 func parsePlainText(r io.Reader) (string, error) {
 	b, err := io.ReadAll(r)
 	if err != nil {
@@ -33,42 +30,29 @@ func parsePlainText(r io.Reader) (string, error) {
 	return string(b), nil
 }
 
-// parsePDF อ่านไฟล์ PDF
 func parsePDF(r io.Reader) (string, error) {
-	// อ่าน bytes ทั้งหมดก่อน
-	b, err := io.ReadAll(r)
+	// เขียนลง temp file ก่อน
+	tmp, err := os.CreateTemp("", "upload-*.pdf")
 	if err != nil {
-		return "", fmt.Errorf("read pdf: %w", err)
+		return "", fmt.Errorf("create temp file: %w", err)
 	}
+	defer os.Remove(tmp.Name())
 
-	// สร้าง ReaderAt จาก bytes
-	readerAt := bytes.NewReader(b)
+	if _, err := io.Copy(tmp, r); err != nil {
+		return "", fmt.Errorf("write temp file: %w", err)
+	}
+	tmp.Close()
 
-	// เปิด PDF
-	pdfReader, err := pdf.NewReader(readerAt, int64(len(b)))
+	// รัน pdftotext
+	out, err := exec.Command("pdftotext", tmp.Name(), "-").Output()
 	if err != nil {
-		return "", fmt.Errorf("open pdf: %w", err)
+		return "", fmt.Errorf("pdftotext: %w", err)
 	}
 
-	// อ่านทุกหน้า
-	var sb strings.Builder
-	for i := 1; i <= pdfReader.NumPage(); i++ {
-		page := pdfReader.Page(i)
-		if page.V.IsNull() {
-			continue
-		}
-		text, err := page.GetPlainText(nil)
-		if err != nil {
-			continue
-		}
-		sb.WriteString(text)
-		sb.WriteString("\n")
-	}
-
-	result := strings.TrimSpace(sb.String())
-	if result == "" {
+	text := strings.TrimSpace(string(out))
+	if text == "" {
 		return "", fmt.Errorf("no text extracted from PDF")
 	}
 
-	return result, nil
+	return text, nil
 }

@@ -13,6 +13,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o orchestrator ./cmd/server
 # Stage 2: Run
 FROM alpine:latest
 
+# ติดตั้ง pdftotext
+RUN apk add --no-cache poppler-utils
+
 WORKDIR /app
 
 COPY --from=builder /app/orchestrator .

@@ -21,24 +21,45 @@ services:
          retries: 5
 
    # ============================================================
-   # CHAT UI
+   # GO ORCHESTRATOR
    # ============================================================
-   open-webui:
-      image: ghcr.io/open-webui/open-webui:main
-      container_name: orchestrator-webui
+   orchestrator:
+      build: .
+      container_name: orchestrator-api
       restart: unless-stopped
+      env_file:
+         - .env
+      environment:
+         LLM_HOST: host.docker.internal
+         DB_HOST: orchestrator-postgres
+         DB_PORT: 5432
+      ports:
+         - "50000:50000"
       depends_on:
          postgres:
             condition: service_healthy
-      environment:
-         OPENAI_API_BASE_URL: http://host.docker.internal:11434/v1
-         OPENAI_API_KEY: ollama
-      volumes:
-         - webui_data:/app/backend/data
-      ports:
-         - "53000:8080"
       extra_hosts:
          - "host.docker.internal:host-gateway"
+
+   # ============================================================
+   # CHAT UI
+   # ============================================================
+   # open-webui:
+   #    image: ghcr.io/open-webui/open-webui:main
+   #    container_name: orchestrator-webui
+   #    restart: unless-stopped
+   #    depends_on:
+   #       postgres:
+   #          condition: service_healthy
+   #    environment:
+   #       OPENAI_API_BASE_URL: http://host.docker.internal:11434/v1
+   #       OPENAI_API_KEY: ollama
+   #    volumes:
+   #       - webui_data:/app/backend/data
+   #    ports:
+   #       - "53000:8080"
+   #    extra_hosts:
+   #       - "host.docker.internal:host-gateway"
 
    # ============================================================
    # MONITORING (เตรียมไว้ — เปิดใช้ตอน Production)
