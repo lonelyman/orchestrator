@@ -80,6 +80,42 @@ func (p *PgvectorAdapter) Delete(ctx context.Context, id string) error {
 	return err
 }
 
+func (p *PgvectorAdapter) ListDocuments(ctx context.Context) ([]models.DocumentSummary, error) {
+	query := `
+		SELECT source, COUNT(*)::int, MIN(created_at), MAX(created_at)
+		FROM documents
+		GROUP BY source
+		ORDER BY MAX(created_at) DESC, source ASC`
+
+	rows, err := p.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("list documents: %w", err)
+	}
+	defer rows.Close()
+
+	var summaries []models.DocumentSummary
+	for rows.Next() {
+		var summary models.DocumentSummary
+		if err := rows.Scan(&summary.Source, &summary.Chunks, &summary.CreatedAt, &summary.LastIngestAt); err != nil {
+			return nil, fmt.Errorf("scan document summary: %w", err)
+		}
+		summaries = append(summaries, summary)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list documents rows: %w", err)
+	}
+
+	return summaries, nil
+}
+
+func (p *PgvectorAdapter) DeleteDocumentSource(ctx context.Context, source string) (int64, error) {
+	tag, err := p.pool.Exec(ctx, `DELETE FROM documents WHERE source = $1`, source)
+	if err != nil {
+		return 0, fmt.Errorf("delete document source: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 // Ping ตรวจสอบการเชื่อมต่อ PostgreSQL
 func (p *PgvectorAdapter) Ping(ctx context.Context) error {
 	return p.pool.Ping(ctx)

@@ -343,8 +343,7 @@ prompts/
 
 ### Gap G — Document Management ยังไม่ครบ
 
-**ปัจจุบัน:** ingest แล้วเก็บใน `documents` table — ไม่มี:
-- List documents
+**ปัจจุบัน:** ingest แล้วเก็บใน `documents` table — มี list/delete รอบแรกแล้ว แต่ยังไม่มี:
 - Update document (re-ingest)
 - Delete document
 - Soft delete + version
@@ -573,8 +572,8 @@ type ModelRouter interface {
    - Backward compat ผ่าน optional field
 
 3. **Document CRUD** (effort: S, value: H)
-   - User ต้องลบ/แก้เอกสารได้
-   - ป้องกัน "เอกสารเก่าค้าง" ใน RAG
+   - ✅ list/delete ตาม source ทำแล้ว
+   - ยังเหลือ update/re-ingest, versioning, soft delete
 
 4. **Prompt management** (effort: S, value: M)
    - 5 use case prompt ต่างกัน
@@ -606,7 +605,7 @@ type ModelRouter interface {
 |---|---|---|
 | ถามทั่วไป | LLM | ✅ พร้อม |
 | ข้อมูลในเน็ต | LLM + WebSearchPort + Cache | ❌ ขาด search |
-| ข้อมูลองค์กร | LLM + RAG + Document CRUD | 🟡 RAG พร้อม, ขาด CRUD |
+| ข้อมูลองค์กร | LLM + RAG + Document CRUD | 🟡 RAG พร้อม, มี list/delete, ยังขาด versioning |
 | ระบบงานขาย | LLM + Tool calling + MCP | 🟡 MCP พร้อม, ขาด tool calling |
 | ผู้บริหาร | LLM + Tool calling + Analytics + RAG + WebSearch | 🟡 ครึ่งทาง |
 

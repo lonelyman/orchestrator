@@ -11,6 +11,14 @@ type Document struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// DocumentSummary คือข้อมูลรวมของเอกสารหนึ่งแหล่งในระบบ RAG
+type DocumentSummary struct {
+	Source       string    `json:"source"`
+	Chunks       int       `json:"chunks"`
+	CreatedAt    time.Time `json:"created_at"`
+	LastIngestAt time.Time `json:"last_ingest_at"`
+}
+
 // SearchResult คือผลลัพธ์จากการค้นหา Vector
 type SearchResult struct {
 	Document Document `json:"document"`

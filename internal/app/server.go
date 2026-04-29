@@ -94,7 +94,8 @@ func New(ctx context.Context, cfg *config.AppConfig) (*Server, error) {
 			OCRTimeout:  cfg.OCRTimeout,
 			OCRMaxPages: cfg.OCRMaxPages,
 		}, cfg.RAGIngestTimeout),
-		AuditHandler: handlers.NewAuditHandler(auditAdapter),
+		DocumentHandler: handlers.NewDocumentHandler(vectorAdapter),
+		AuditHandler:    handlers.NewAuditHandler(auditAdapter),
 	})
 
 	return &Server{App: fiberApp, pool: pool, sqlDB: sqlDB}, nil

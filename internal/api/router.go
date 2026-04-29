@@ -14,15 +14,16 @@ import (
 )
 
 type RouterDependencies struct {
-	Config        *config.AppConfig
-	JWTManager    *auth.JWTManager
-	SessionStore  ports.SessionPort
-	AuditStore    ports.AuditPort
-	AuthHandler   *handlers.AuthHandler
-	HealthHandler *handlers.HealthHandler
-	ChatHandler   *handlers.ChatHandler
-	RAGHandler    *handlers.RAGHandler
-	AuditHandler  *handlers.AuditHandler
+	Config          *config.AppConfig
+	JWTManager      *auth.JWTManager
+	SessionStore    ports.SessionPort
+	AuditStore      ports.AuditPort
+	AuthHandler     *handlers.AuthHandler
+	HealthHandler   *handlers.HealthHandler
+	ChatHandler     *handlers.ChatHandler
+	RAGHandler      *handlers.RAGHandler
+	DocumentHandler *handlers.DocumentHandler
+	AuditHandler    *handlers.AuditHandler
 }
 
 func NewRouter(deps RouterDependencies) *fiber.App {
@@ -54,6 +55,9 @@ func RegisterRoutes(app *fiber.App, deps RouterDependencies) {
 	protected.Post("/v1/chat/completions", deps.ChatHandler.Completions)
 	protected.Post("/v1/rag/ingest", deps.RAGHandler.Ingest)
 	protected.Post("/v1/rag/upload", deps.RAGHandler.Upload)
+	protected.Get("/v1/rag/documents", deps.DocumentHandler.List)
+	protected.Delete("/v1/rag/documents/:source", deps.DocumentHandler.Delete)
+	protected.Delete("/v1/rag/documents", deps.DocumentHandler.Delete)
 
 	admin := app.Group("/v1/admin", middleware.JWTMiddleware(deps.JWTManager))
 	admin.Use(middleware.RequireRole("admin"))

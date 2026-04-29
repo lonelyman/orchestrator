@@ -32,8 +32,8 @@ TODO:
 - [ ] Batch ingest
 - [ ] Document versioning
 - [ ] Document expiry
-- [ ] GET /v1/rag/documents
-- [ ] DELETE /v1/rag/documents/:id
+- [x] GET /v1/rag/documents
+- [x] DELETE /v1/rag/documents/:source
 - [ ] รองรับ .docx และ .xlsx
 ```
 

@@ -28,7 +28,7 @@
 
 ### Priority กลาง
 - [ ] **WebUI Login** — เชื่อม Open WebUI กับ Auth
-- [ ] **Document Management** — list/delete endpoints
+- [x] **Document Management** — list/delete endpoints
 - [ ] **Circuit Breaker** — ถ้า Ollama ล่ม
 - [x] **vLLM Adapter** — เพิ่ม OpenAI-compatible adapter และใช้ `LLM_BACKEND` เลือก backend
 - [x] **AI OCR Adapter** — ใช้ `OCR_ENGINE=ollama` กับโมเดล `scb10x/typhoon-ocr1.5-3b:latest`

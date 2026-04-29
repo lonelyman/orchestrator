@@ -30,6 +30,8 @@ go run cmd/server/main.go
 | POST   | /v1/chat/completions | Chat (OpenAI-compatible)  |
 | POST   | /v1/rag/ingest       | อัพโหลดเอกสาร             |
 | POST   | /v1/rag/upload       | อัพโหลดไฟล์ .txt/.md/.pdf |
+| GET    | /v1/rag/documents    | รายการเอกสารใน RAG        |
+| DELETE | /v1/rag/documents/:source | ลบเอกสารตาม source |
 
 ### Response format
 
