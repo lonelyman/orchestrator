@@ -207,6 +207,7 @@
 
 ### 23. ไม่มี request body validation
 **ที่:** `chat.go`, `rag.go`
+**สถานะ:** 🟡 แก้แล้วสำหรับ chat request; RAG metadata/filter validation ยังเหลือเมื่อทำ Document Management
 **ปัญหา:** validate แค่ "messages required" — ไม่ check role, length, content size
 
 **แก้:** ใช้ `go-playground/validator` หรือ explicit validation function

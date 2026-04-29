@@ -49,11 +49,17 @@ go run cmd/server/main.go
 
 หมายเหตุ: endpoint `/v1/chat/completions` ใช้ request schema แบบ OpenAI แต่ response ถูกครอบด้วย `data` ตามมาตรฐานบริษัท
 
+### Chat constraints
+
+- `model` ต้องตรงกับ model ที่ server expose ผ่าน `/v1/models`
+- รองรับ role เฉพาะ `system`, `user`, `assistant`
+- ต้องมี `messages` อย่างน้อย 1 รายการ และ message สุดท้ายต้องเป็น `user`
+- จำกัด 64 messages, 20,000 ตัวอักษรต่อ message, 60,000 ตัวอักษรรวม
+
 ### Upload constraints
 
 - รองรับไฟล์: `.txt`, `.md`, `.pdf`
 - ขนาดไฟล์สูงสุด: `10 MB`
-- request ที่ไม่มีข้อความใน `messages` จะถูกปฏิเสธด้วย `400 BAD_REQUEST`
 
 ### PDF extraction notes
 

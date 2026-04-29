@@ -13,6 +13,15 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
+const (
+	maxChatMessages       = 64
+	maxChatContentRunes   = 20_000
+	maxChatTotalRunes     = 60_000
+	defaultChatModel      = "qwen2.5:7b"
+	defaultChatOwner      = "ollama"
+	chatValidationErrCode = "BAD_REQUEST"
+)
+
 type ChatHandler struct {
 	orch        *orchestrator.Orchestrator
 	chatTimeout time.Duration
@@ -21,15 +30,15 @@ type ChatHandler struct {
 }
 
 func NewChatHandler(orch *orchestrator.Orchestrator) *ChatHandler {
-	return NewChatHandlerWithTimeout(orch, 120*time.Second, "qwen2.5:7b", "ollama")
+	return NewChatHandlerWithTimeout(orch, 120*time.Second, defaultChatModel, defaultChatOwner)
 }
 
 func NewChatHandlerWithTimeout(orch *orchestrator.Orchestrator, chatTimeout time.Duration, modelAndOwner ...string) *ChatHandler {
 	if chatTimeout <= 0 {
 		chatTimeout = 120 * time.Second
 	}
-	model := "qwen2.5:7b"
-	ownedBy := "ollama"
+	model := defaultChatModel
+	ownedBy := defaultChatOwner
 	if len(modelAndOwner) > 0 && strings.TrimSpace(modelAndOwner[0]) != "" {
 		model = modelAndOwner[0]
 	}
@@ -56,6 +65,9 @@ func (h *ChatHandler) Completions(c fiber.Ctx) error {
 	var req models.ChatRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return Fail(c, 400, "invalid request", "BAD_REQUEST")
+	}
+	if err := h.validateRequest(&req); err != nil {
+		return Fail(c, 400, err.Error(), chatValidationErrCode)
 	}
 
 	// บันทึก query สำหรับ Audit Log
@@ -122,4 +134,54 @@ func (h *ChatHandler) Completions(c fiber.Ctx) error {
 			},
 		},
 	})
+}
+
+func (h *ChatHandler) validateRequest(req *models.ChatRequest) error {
+	req.Model = strings.TrimSpace(req.Model)
+	if req.Model == "" {
+		req.Model = h.model
+	}
+	if req.Model != h.model {
+		return fmt.Errorf("unsupported model: %s", req.Model)
+	}
+	if len(req.Messages) == 0 {
+		return fmt.Errorf("messages is required")
+	}
+	if len(req.Messages) > maxChatMessages {
+		return fmt.Errorf("messages must contain at most %d items", maxChatMessages)
+	}
+
+	totalRunes := 0
+	for i := range req.Messages {
+		msg := &req.Messages[i]
+		msg.Role = strings.ToLower(strings.TrimSpace(msg.Role))
+		if !isSupportedChatRole(msg.Role) {
+			return fmt.Errorf("messages[%d].role must be one of: system, user, assistant", i)
+		}
+		contentRunes := len([]rune(msg.Content))
+		if strings.TrimSpace(msg.Content) == "" {
+			return fmt.Errorf("messages[%d].content is required", i)
+		}
+		if contentRunes > maxChatContentRunes {
+			return fmt.Errorf("messages[%d].content must be at most %d characters", i, maxChatContentRunes)
+		}
+		totalRunes += contentRunes
+	}
+	if totalRunes > maxChatTotalRunes {
+		return fmt.Errorf("messages total content must be at most %d characters", maxChatTotalRunes)
+	}
+	if req.Messages[len(req.Messages)-1].Role != "user" {
+		return fmt.Errorf("last message role must be user")
+	}
+
+	return nil
+}
+
+func isSupportedChatRole(role string) bool {
+	switch role {
+	case "system", "user", "assistant":
+		return true
+	default:
+		return false
+	}
 }
