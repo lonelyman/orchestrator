@@ -14,6 +14,7 @@ import (
 	"github.com/enterprise-ai/orchestrator/internal/api/middleware"
 	"github.com/enterprise-ai/orchestrator/internal/core/orchestrator"
 	"github.com/enterprise-ai/orchestrator/internal/core/rag"
+	"github.com/enterprise-ai/orchestrator/internal/domain/models"
 	auditInfra "github.com/enterprise-ai/orchestrator/internal/infrastructure/audit"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/auth"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/embedder"
@@ -21,6 +22,7 @@ import (
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/session"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/vector"
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/limiter"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	pgxvector "github.com/pgvector/pgvector-go/pgx"
@@ -84,7 +86,7 @@ func main() {
 	orch := orchestrator.New(ollamaAdapter, ragEngine, sessionAdapter, cfg.SystemPrompt)
 
 	// สร้าง Auth
-	ldapAdapter := auth.NewLDAPAdapter(cfg.ADServer, cfg.ADPort, cfg.ADBaseDN, cfg.ADDomain)
+	ldapAdapter := auth.NewLDAPAdapter(cfg.ADServer, cfg.ADPort, cfg.ADBaseDN, cfg.ADDomain, cfg.DevMode, cfg.DevUsername, cfg.DevPassword)
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, 8*time.Hour)
 	authHandler := handlers.NewAuthHandler(ldapAdapter, jwtManager)
 
@@ -106,6 +108,29 @@ func main() {
 	protected := app.Group("/", middleware.JWTMiddleware(jwtManager))
 	protected.Use(middleware.SessionMiddleware(sessionAdapter))
 	protected.Use(middleware.AuditMiddleware(auditAdapter))
+
+	// Rate Limiting — 20 requests per minute per user
+	protected.Use(limiter.New(limiter.Config{
+		Max:        20,
+		Expiration: 1 * time.Minute,
+		KeyGenerator: func(c fiber.Ctx) string {
+			// ใช้ user_id เป็น key ถ้ามี JWT
+			if claims, ok := c.Locals("claims").(*models.Claims); ok && claims != nil {
+				return claims.UserID
+			}
+			// fallback ใช้ IP
+			return c.IP()
+		},
+		LimitReached: func(c fiber.Ctx) error {
+			return c.Status(429).JSON(fiber.Map{
+				"error": fiber.Map{
+					"message": "too many requests, please slow down",
+					"code":    "RATE_LIMIT_EXCEEDED",
+				},
+			})
+		},
+	}))
+
 	protected.Get("/auth/me", authHandler.Me)
 	protected.Post("/v1/chat/completions", chatHandler.Completions)
 	protected.Post("/v1/rag/ingest", ragHandler.Ingest)

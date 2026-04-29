@@ -10,18 +10,45 @@ import (
 )
 
 type LDAPAdapter struct {
-	server string
-	port   int
-	baseDN string
-	domain string
+	server      string
+	port        int
+	baseDN      string
+	domain      string
+	devMode     bool
+	devUsername string
+	devPassword string
 }
 
-func NewLDAPAdapter(server string, port int, baseDN, domain string) *LDAPAdapter {
-	return &LDAPAdapter{server: server, port: port, baseDN: baseDN, domain: domain}
+func NewLDAPAdapter(server string, port int, baseDN, domain string, devMode bool, devUsername, devPassword string) *LDAPAdapter {
+	return &LDAPAdapter{
+		server:      server,
+		port:        port,
+		baseDN:      baseDN,
+		domain:      domain,
+		devMode:     devMode,
+		devUsername: devUsername,
+		devPassword: devPassword,
+	}
 }
 
 func (l *LDAPAdapter) Authenticate(username, password string) (*models.User, error) {
-	// เชื่อมต่อ LDAP
+	// Dev Mode — ข้าม AD
+	if l.devMode {
+		slog.Warn("DEV MODE: bypassing AD authentication")
+		if username == l.devUsername && password == l.devPassword {
+			return &models.User{
+				ID:          username,
+				Username:    username,
+				Email:       username + "@nutritionprofess.com",
+				DisplayName: username,
+				Department:  "Development",
+				Role:        "admin",
+			}, nil
+		}
+		return nil, fmt.Errorf("invalid credentials")
+	}
+
+	// Production — ใช้ AD จริง
 	ldapURL := fmt.Sprintf("ldap://%s:%d", l.server, l.port)
 	conn, err := ldap.DialURL(ldapURL)
 	if err != nil {
@@ -29,19 +56,16 @@ func (l *LDAPAdapter) Authenticate(username, password string) (*models.User, err
 	}
 	defer conn.Close()
 
-	// StartTLS
 	if err := conn.StartTLS(&tls.Config{InsecureSkipVerify: true}); err != nil {
-		slog.Warn("startTLS failed, continuing without TLS", "error", err)
+		slog.Warn("startTLS failed", "error", err)
 	}
 
-	// Bind ด้วย username@domain
 	userDN := fmt.Sprintf("%s@%s", username, l.domain)
 	if err := conn.Bind(userDN, password); err != nil {
 		slog.Warn("authentication failed", "username", username, "error", err.Error())
 		return nil, fmt.Errorf("invalid credentials")
 	}
 
-	// ดึงข้อมูล user จาก AD
 	searchRequest := ldap.NewSearchRequest(
 		l.baseDN,
 		ldap.ScopeWholeSubtree,
@@ -54,12 +78,11 @@ func (l *LDAPAdapter) Authenticate(username, password string) (*models.User, err
 
 	result, err := conn.Search(searchRequest)
 	if err != nil || len(result.Entries) == 0 {
-		// ถ้า search ไม่ได้ ใช้ข้อมูลจาก username แทน
-		slog.Warn("search AD failed, using basic user info", "error", err)
+		slog.Warn("search AD failed, using basic info", "error", err)
 		return &models.User{
 			ID:          username,
 			Username:    username,
-			Email:       userDN,
+			Email:       fmt.Sprintf("%s@%s", username, l.domain),
 			DisplayName: username,
 			Role:        "employee",
 		}, nil
