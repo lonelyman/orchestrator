@@ -10,8 +10,8 @@ services:
          POSTGRES_DB: orchestrator
          POSTGRES_USER: orchestrator
          POSTGRES_PASSWORD: changeme
-      volumes:          
-         - postgres_data:/var/lib/postgresql/data
+      volumes:
+         - ./data/postgres:/var/lib/postgresql/data
       ports:
          - "15433:5432"
       healthcheck:
@@ -56,7 +56,7 @@ services:
          OPENAI_API_BASE_URL: http://host.docker.internal:11434/v1
          OPENAI_API_KEY: ollama
       volumes:
-         - webui_data:/app/backend/data
+         - ./data/webui:/app/backend/data
       ports:
          - "53000:8080"
       extra_hosts:
@@ -96,7 +96,7 @@ services:
    #   ports:
    #     - "3100:3100"
    #   volumes:
-   #     - loki_data:/loki
+   #     - ./data/loki:/loki
 
    # grafana:
    #   image: grafana/grafana:latest
@@ -107,7 +107,7 @@ services:
    #   environment:
    #     GF_SECURITY_ADMIN_PASSWORD: changeme
    #   volumes:
-   #     - grafana_data:/var/lib/grafana
+   #     - ./data/grafana:/var/lib/grafana
    #   ports:
    #     - "53001:3000"
 
@@ -123,7 +123,7 @@ services:
    #     NVIDIA_VISIBLE_DEVICES: all
    #     NVIDIA_DRIVER_CAPABILITIES: compute,utility
    #   volumes:
-   #     - vllm_models:/root/.cache/huggingface
+   #     - ./data/vllm:/root/.cache/huggingface
    #   ports:
    #     - "51434:8000"
    #   command: >
@@ -140,9 +140,4 @@ services:
    #             count: all
    #             capabilities: [gpu]
 
-volumes:
-   postgres_data:
-   webui_data:
-   # loki_data:
-   # grafana_data:
-   # vllm_models:
+volumes: {}

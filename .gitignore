@@ -30,3 +30,6 @@ Thumbs.db
 
 # Local generated snapshots
 tree.txt
+
+# Database data (bind mount)
+data/

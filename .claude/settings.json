@@ -5,7 +5,16 @@
       "Bash(git reset *)",
       "Bash(curl -s -X POST http://10.19.105.32:50000/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"nipon.k\",\"password\":\"@nutrition888\"}')",
       "Bash(python3 -m json.tool)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(psql -h localhost -U orchestrator -d orchestrator -c \"SELECT * FROM pg_available_extensions WHERE name = 'vector';\")",
+      "Bash(go install *)",
+      "Bash(go env *)",
+      "Bash(export PATH=\"$PATH:$\\(go env GOPATH\\)/bin\")",
+      "Bash(goose -dir /Users/nipon.k/Coding/orchestrator/internal/infrastructure/migrations/sql postgres \"host=localhost port=5432 user=orchestrator password=changeme dbname=orchestrator sslmode=disable\" status)",
+      "Bash(docker compose *)",
+      "Bash(goose -dir /Users/nipon.k/Coding/orchestrator/internal/infrastructure/migrations/sql postgres \"host=localhost port=15433 user=orchestrator password=changeme dbname=orchestrator sslmode=disable\" status)",
+      "Bash(goose -dir /Users/nipon.k/Coding/orchestrator/internal/infrastructure/migrations/sql postgres \"host=localhost port=15433 user=orchestrator password=changeme dbname=orchestrator sslmode=disable\" up)",
+      "Bash(docker exec *)"
     ]
   }
 }

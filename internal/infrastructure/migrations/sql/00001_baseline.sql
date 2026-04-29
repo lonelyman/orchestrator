@@ -1,6 +1,6 @@
 -- +goose Up
-CREATE EXTENSION vector;
-CREATE EXTENSION pgcrypto;
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE sessions (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -84,5 +84,5 @@ DROP TABLE audit_logs;
 DROP TABLE messages;
 DROP TABLE sessions;
 
-DROP EXTENSION pgcrypto;
-DROP EXTENSION vector;
+DROP EXTENSION IF EXISTS pgcrypto;
+DROP EXTENSION IF EXISTS vector;
