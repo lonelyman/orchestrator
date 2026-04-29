@@ -70,7 +70,7 @@ func main() {
 	sqlDB := stdlib.OpenDBFromPool(pool)
 	defer sqlDB.Close()
 
-	migrationCtx, migrationCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	migrationCtx, migrationCancel := context.WithTimeout(context.Background(), cfg.MigrationTimeout)
 	defer migrationCancel()
 	if err := migrations.Up(migrationCtx, sqlDB); err != nil {
 		slog.Error("run migrations", "error", err)
@@ -85,7 +85,7 @@ func main() {
 	pgvectorAdapter := vector.NewPgvectorAdapter(pool)
 
 	// สร้าง Session Adapter
-	sessionAdapter := session.NewPostgresAdapter(pool, 30*time.Minute)
+	sessionAdapter := session.NewPostgresAdapter(pool, cfg.SessionExpiry)
 
 	// สร้าง Audit Adapter
 	auditAdapter := auditInfra.NewPostgresAdapter(pool)
@@ -101,13 +101,14 @@ func main() {
 	authHandler := handlers.NewAuthHandler(ldapAdapter, jwtManager)
 
 	// สร้าง Handlers
-	healthHandler := handlers.NewHealthHandler(orch, pgvectorAdapter)
-	chatHandler := handlers.NewChatHandler(orch)
-	ragHandler := handlers.NewRAGHandler(ragEngine)
+	healthHandler := handlers.NewHealthHandlerWithTimeout(orch, pgvectorAdapter, cfg.HealthTimeout)
+	chatHandler := handlers.NewChatHandlerWithTimeout(orch, cfg.ChatTimeout)
+	ragHandler := handlers.NewRAGHandlerWithLimit(ragEngine, cfg.MaxUploadBytes, cfg.RAGIngestTimeout)
 
 	// สร้าง Fiber app
 	app := fiber.New(fiber.Config{
-		AppName: "Enterprise AI Orchestrator v0.1",
+		AppName:   "Enterprise AI Orchestrator v0.1",
+		BodyLimit: cfg.BodyLimit,
 	})
 
 	// Public routes (ไม่ต้อง login)
@@ -119,11 +120,11 @@ func main() {
 
 	protected := app.Group("/", middleware.JWTMiddleware(jwtManager))
 	protected.Use(middleware.SessionMiddleware(sessionAdapter))
-	protected.Use(middleware.AuditMiddleware(auditAdapter))
+	protected.Use(middleware.AuditMiddleware(auditAdapter, cfg.AuditTimeout))
 
 	// Rate Limiting — 20 requests per minute per user
 	protected.Use(limiter.New(limiter.Config{
-		Max:        20,
+		Max:        cfg.RateLimitPerMin,
 		Expiration: 1 * time.Minute,
 		KeyGenerator: func(c fiber.Ctx) string {
 			// ใช้ user_id เป็น key ถ้ามี JWT

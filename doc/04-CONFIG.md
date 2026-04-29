@@ -29,6 +29,14 @@ ollama ps
 ```env
 # Server
 API_PORT=50000
+RATE_LIMIT_PER_MINUTE=20
+SESSION_EXPIRY=30m
+CHAT_TIMEOUT=120s
+RAG_INGEST_TIMEOUT=120s
+AUDIT_TIMEOUT=5s
+HEALTH_TIMEOUT=5s
+MIGRATION_TIMEOUT=30s
+MAX_UPLOAD_MB=10
 
 # LLM
 LLM_BACKEND=ollama
@@ -119,5 +127,5 @@ Format:   username@nutrition.com
 3. เปลี่ยน model:
    LLM_MODEL=Qwen/Qwen2.5-32B-Instruct-AWQ
 
-4. ไม่ต้องแก้ code อะไรเลย ✅
+4. ต้องมี vLLM/OpenAI-compatible adapter ที่เลือกผ่าน LLM_BACKEND ก่อนขึ้น production
 ```

@@ -9,7 +9,9 @@ import (
 )
 
 type RAGHandler struct {
-	ragEngine ragIngestor
+	ragEngine        ragIngestor
+	maxUploadBytes   int64
+	ragIngestTimeout time.Duration
 }
 
 type ragIngestor interface {
@@ -17,11 +19,25 @@ type ragIngestor interface {
 }
 
 func NewRAGHandler(ragEngine *rag.RAGEngine) *RAGHandler {
-	return &RAGHandler{ragEngine: ragEngine}
+	return NewRAGHandlerWithLimit(ragEngine, rag.MaxUploadBytes, 120*time.Second)
 }
 
 func NewRAGHandlerWithIngestor(ragEngine ragIngestor) *RAGHandler {
-	return &RAGHandler{ragEngine: ragEngine}
+	return NewRAGHandlerWithLimit(ragEngine, rag.MaxUploadBytes, 120*time.Second)
+}
+
+func NewRAGHandlerWithLimit(ragEngine ragIngestor, maxUploadBytes int64, ragIngestTimeout time.Duration) *RAGHandler {
+	if maxUploadBytes <= 0 {
+		maxUploadBytes = rag.MaxUploadBytes
+	}
+	if ragIngestTimeout <= 0 {
+		ragIngestTimeout = 120 * time.Second
+	}
+	return &RAGHandler{
+		ragEngine:        ragEngine,
+		maxUploadBytes:   maxUploadBytes,
+		ragIngestTimeout: ragIngestTimeout,
+	}
 }
 
 func (h *RAGHandler) Ingest(c fiber.Ctx) error {
@@ -37,7 +53,7 @@ func (h *RAGHandler) Ingest(c fiber.Ctx) error {
 		return Fail(c, 400, "invalid request", "BAD_REQUEST")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), h.ragIngestTimeout)
 	defer cancel()
 
 	if err := h.ragEngine.Ingest(ctx, req.Content, req.Source); err != nil {
@@ -59,7 +75,7 @@ func (h *RAGHandler) Upload(c fiber.Ctx) error {
 	if file.Size <= 0 {
 		return Fail(c, 400, "empty file", "BAD_REQUEST")
 	}
-	if file.Size > rag.MaxUploadBytes {
+	if file.Size > h.maxUploadBytes {
 		return Fail(c, 413, "file too large", "FILE_TOO_LARGE")
 	}
 
@@ -69,7 +85,7 @@ func (h *RAGHandler) Upload(c fiber.Ctx) error {
 	}
 	defer f.Close()
 
-	text, err := rag.Parse(file.Filename, f)
+	text, err := rag.ParseWithLimit(file.Filename, f, h.maxUploadBytes)
 	if err != nil {
 		return Fail(c, 400, err.Error(), "PARSE_ERROR")
 	}
@@ -82,7 +98,7 @@ func (h *RAGHandler) Upload(c fiber.Ctx) error {
 		return Fail(c, 400, "no chunks generated", "PARSE_ERROR")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), h.ragIngestTimeout)
 	defer cancel()
 
 	for _, chunk := range chunks {

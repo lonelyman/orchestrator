@@ -11,6 +11,14 @@ var configEnvKeys = []string{
 	"DEV_USERNAME",
 	"DEV_PASSWORD",
 	"API_PORT",
+	"RATE_LIMIT_PER_MINUTE",
+	"SESSION_EXPIRY",
+	"CHAT_TIMEOUT",
+	"RAG_INGEST_TIMEOUT",
+	"AUDIT_TIMEOUT",
+	"HEALTH_TIMEOUT",
+	"MIGRATION_TIMEOUT",
+	"MAX_UPLOAD_MB",
 	"LLM_BACKEND",
 	"LLM_HOST",
 	"LLM_PORT",
@@ -52,6 +60,18 @@ func TestLoad_AllowsDevDefaults(t *testing.T) {
 	if cfg.JWTExpiry != 8*time.Hour {
 		t.Fatalf("expected default JWT expiry 8h, got %s", cfg.JWTExpiry)
 	}
+	if cfg.RateLimitPerMin != 20 {
+		t.Fatalf("expected default rate limit 20, got %d", cfg.RateLimitPerMin)
+	}
+	if cfg.SessionExpiry != 30*time.Minute {
+		t.Fatalf("expected default session expiry 30m, got %s", cfg.SessionExpiry)
+	}
+	if cfg.ChatTimeout != 120*time.Second {
+		t.Fatalf("expected default chat timeout 120s, got %s", cfg.ChatTimeout)
+	}
+	if cfg.MaxUploadMegabyte != 10 || cfg.MaxUploadBytes != 10<<20 {
+		t.Fatalf("expected default upload 10MB, got %d MB / %d bytes", cfg.MaxUploadMegabyte, cfg.MaxUploadBytes)
+	}
 }
 
 func TestLoad_RejectsInvalidPort(t *testing.T) {
@@ -65,6 +85,20 @@ func TestLoad_RejectsInvalidPort(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "API_PORT") {
 		t.Fatalf("expected API_PORT error, got %v", err)
+	}
+}
+
+func TestLoad_RejectsInvalidOperationalLimit(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("DEV_MODE", "true")
+	t.Setenv("RATE_LIMIT_PER_MINUTE", "0")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(err.Error(), "RATE_LIMIT_PER_MINUTE") {
+		t.Fatalf("expected RATE_LIMIT_PER_MINUTE error, got %v", err)
 	}
 }
 
@@ -92,6 +126,9 @@ func TestLoad_AcceptsProductionConfig(t *testing.T) {
 	t.Setenv("AD_DOMAIN", "example.com")
 	t.Setenv("JWT_SECRET", "0123456789abcdef0123456789abcdef")
 	t.Setenv("JWT_EXPIRY", "30m")
+	t.Setenv("SESSION_EXPIRY", "45m")
+	t.Setenv("CHAT_TIMEOUT", "90s")
+	t.Setenv("MAX_UPLOAD_MB", "25")
 
 	cfg, err := Load()
 	if err != nil {
@@ -99,5 +136,14 @@ func TestLoad_AcceptsProductionConfig(t *testing.T) {
 	}
 	if cfg.JWTExpiry != 30*time.Minute {
 		t.Fatalf("expected JWT expiry 30m, got %s", cfg.JWTExpiry)
+	}
+	if cfg.SessionExpiry != 45*time.Minute {
+		t.Fatalf("expected session expiry 45m, got %s", cfg.SessionExpiry)
+	}
+	if cfg.ChatTimeout != 90*time.Second {
+		t.Fatalf("expected chat timeout 90s, got %s", cfg.ChatTimeout)
+	}
+	if cfg.MaxUploadBytes != 25<<20 {
+		t.Fatalf("expected max upload 25MB, got %d", cfg.MaxUploadBytes)
 	}
 }

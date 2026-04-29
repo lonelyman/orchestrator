@@ -18,7 +18,9 @@ const (
 // AppConfig เก็บ configuration ทั้งหมดของระบบ
 type AppConfig struct {
 	// Server
-	APIPort string
+	APIPort       string
+	BodyLimit     int
+	HealthTimeout time.Duration
 
 	// LLM
 	LLMBackend string
@@ -45,6 +47,16 @@ type AppConfig struct {
 	// JWT
 	JWTSecret string
 	JWTExpiry time.Duration
+
+	// Runtime Limits
+	SessionExpiry     time.Duration
+	ChatTimeout       time.Duration
+	RAGIngestTimeout  time.Duration
+	AuditTimeout      time.Duration
+	MigrationTimeout  time.Duration
+	RateLimitPerMin   int
+	MaxUploadBytes    int64
+	MaxUploadMegabyte int
 
 	// System Prompt
 	SystemPrompt string
@@ -79,12 +91,46 @@ func Load() (*AppConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid JWT_EXPIRY: %w", err)
 	}
+	sessionExpiry, err := parseDuration("SESSION_EXPIRY", "30m")
+	if err != nil {
+		return nil, err
+	}
+	chatTimeout, err := parseDuration("CHAT_TIMEOUT", "120s")
+	if err != nil {
+		return nil, err
+	}
+	ragIngestTimeout, err := parseDuration("RAG_INGEST_TIMEOUT", "120s")
+	if err != nil {
+		return nil, err
+	}
+	auditTimeout, err := parseDuration("AUDIT_TIMEOUT", "5s")
+	if err != nil {
+		return nil, err
+	}
+	healthTimeout, err := parseDuration("HEALTH_TIMEOUT", "5s")
+	if err != nil {
+		return nil, err
+	}
+	migrationTimeout, err := parseDuration("MIGRATION_TIMEOUT", "30s")
+	if err != nil {
+		return nil, err
+	}
+	rateLimitPerMin, err := parsePositiveInt("RATE_LIMIT_PER_MINUTE", "20")
+	if err != nil {
+		return nil, err
+	}
+	maxUploadMB, err := parsePositiveInt("MAX_UPLOAD_MB", "10")
+	if err != nil {
+		return nil, err
+	}
+	maxUploadBytes := int64(maxUploadMB) << 20
 
 	cfg := &AppConfig{
 		DevMode:     devMode,
 		DevUsername: getEnv("DEV_USERNAME", "dev"),
 		DevPassword: getEnv("DEV_PASSWORD", "dev1234"),
 		APIPort:     getEnv("API_PORT", "50000"),
+		BodyLimit:   int(maxUploadBytes + (1 << 20)),
 		LLMBackend:  getEnv("LLM_BACKEND", "ollama"),
 		LLMHost:     getEnv("LLM_HOST", "localhost"),
 		LLMPort:     getEnv("LLM_PORT", "11434"),
@@ -101,6 +147,16 @@ func Load() (*AppConfig, error) {
 		ADDomain:    getEnv("AD_DOMAIN", "nutritionprofess.com"),
 		JWTSecret:   getEnv("JWT_SECRET", defaultJWTSecret),
 		JWTExpiry:   jwtExpiry,
+		// Runtime Limits
+		SessionExpiry:     sessionExpiry,
+		ChatTimeout:       chatTimeout,
+		RAGIngestTimeout:  ragIngestTimeout,
+		AuditTimeout:      auditTimeout,
+		HealthTimeout:     healthTimeout,
+		MigrationTimeout:  migrationTimeout,
+		RateLimitPerMin:   rateLimitPerMin,
+		MaxUploadBytes:    maxUploadBytes,
+		MaxUploadMegabyte: maxUploadMB,
 		SystemPrompt: getEnv("SYSTEM_PROMPT",
 			"You are a helpful enterprise AI assistant. You must always respond in Thai language only."),
 	}
@@ -138,6 +194,30 @@ func (c *AppConfig) Validate() error {
 
 	if c.JWTExpiry <= 0 {
 		errs = append(errs, fmt.Errorf("JWT_EXPIRY must be greater than zero"))
+	}
+	if c.SessionExpiry <= 0 {
+		errs = append(errs, fmt.Errorf("SESSION_EXPIRY must be greater than zero"))
+	}
+	if c.ChatTimeout <= 0 {
+		errs = append(errs, fmt.Errorf("CHAT_TIMEOUT must be greater than zero"))
+	}
+	if c.RAGIngestTimeout <= 0 {
+		errs = append(errs, fmt.Errorf("RAG_INGEST_TIMEOUT must be greater than zero"))
+	}
+	if c.AuditTimeout <= 0 {
+		errs = append(errs, fmt.Errorf("AUDIT_TIMEOUT must be greater than zero"))
+	}
+	if c.HealthTimeout <= 0 {
+		errs = append(errs, fmt.Errorf("HEALTH_TIMEOUT must be greater than zero"))
+	}
+	if c.MigrationTimeout <= 0 {
+		errs = append(errs, fmt.Errorf("MIGRATION_TIMEOUT must be greater than zero"))
+	}
+	if c.RateLimitPerMin <= 0 {
+		errs = append(errs, fmt.Errorf("RATE_LIMIT_PER_MINUTE must be greater than zero"))
+	}
+	if c.MaxUploadBytes <= 0 || c.MaxUploadMegabyte <= 0 {
+		errs = append(errs, fmt.Errorf("MAX_UPLOAD_MB must be greater than zero"))
 	}
 
 	if !c.DevMode {
@@ -182,6 +262,30 @@ func parsePort(key, defaultVal string) (int, error) {
 		return 0, fmt.Errorf("invalid %s: must be between 1 and 65535", key)
 	}
 	return port, nil
+}
+
+func parsePositiveInt(key, defaultVal string) (int, error) {
+	value := getEnv(key, defaultVal)
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: %w", key, err)
+	}
+	if parsed <= 0 {
+		return 0, fmt.Errorf("invalid %s: must be greater than zero", key)
+	}
+	return parsed, nil
+}
+
+func parseDuration(key, defaultVal string) (time.Duration, error) {
+	value := getEnv(key, defaultVal)
+	parsed, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: %w", key, err)
+	}
+	if parsed <= 0 {
+		return 0, fmt.Errorf("invalid %s: must be greater than zero", key)
+	}
+	return parsed, nil
 }
 
 func isWeakJWTSecret(secret string) bool {

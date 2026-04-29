@@ -14,11 +14,19 @@ import (
 )
 
 type ChatHandler struct {
-	orch *orchestrator.Orchestrator
+	orch        *orchestrator.Orchestrator
+	chatTimeout time.Duration
 }
 
 func NewChatHandler(orch *orchestrator.Orchestrator) *ChatHandler {
-	return &ChatHandler{orch: orch}
+	return NewChatHandlerWithTimeout(orch, 120*time.Second)
+}
+
+func NewChatHandlerWithTimeout(orch *orchestrator.Orchestrator, chatTimeout time.Duration) *ChatHandler {
+	if chatTimeout <= 0 {
+		chatTimeout = 120 * time.Second
+	}
+	return &ChatHandler{orch: orch, chatTimeout: chatTimeout}
 }
 
 func (h *ChatHandler) Models(c fiber.Ctx) error {
@@ -56,7 +64,7 @@ func (h *ChatHandler) Completions(c fiber.Ctx) error {
 		c.Set("Connection", "keep-alive")
 
 		streamCtx := context.WithValue(context.Background(), "session_id", sessionID)
-		streamCtx, streamCancel := context.WithTimeout(streamCtx, 120*time.Second)
+		streamCtx, streamCancel := context.WithTimeout(streamCtx, h.chatTimeout)
 
 		// Collect full response สำหรับ Audit Log
 		var fullResponse strings.Builder
@@ -80,7 +88,7 @@ func (h *ChatHandler) Completions(c fiber.Ctx) error {
 
 	// Non-stream mode
 	ctx := context.WithValue(context.Background(), "session_id", sessionID)
-	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, h.chatTimeout)
 	defer cancel()
 
 	result, intentType, err := h.orch.Chat(ctx, req)

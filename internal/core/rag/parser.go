@@ -16,30 +16,37 @@ import (
 const MaxUploadBytes int64 = 10 << 20 // 10 MB
 
 func Parse(filename string, r io.Reader) (string, error) {
+	return ParseWithLimit(filename, r, MaxUploadBytes)
+}
+
+func ParseWithLimit(filename string, r io.Reader, maxBytes int64) (string, error) {
+	if maxBytes <= 0 {
+		maxBytes = MaxUploadBytes
+	}
 	ext := strings.ToLower(filepath.Ext(filename))
 
 	switch ext {
 	case ".txt", ".md":
-		return parsePlainText(r)
+		return parsePlainText(r, maxBytes)
 	case ".pdf":
-		return parsePDF(r)
+		return parsePDF(r, maxBytes)
 	default:
 		return "", fmt.Errorf("unsupported file type: %s", ext)
 	}
 }
 
-func parsePlainText(r io.Reader) (string, error) {
-	b, err := io.ReadAll(io.LimitReader(r, MaxUploadBytes+1))
+func parsePlainText(r io.Reader, maxBytes int64) (string, error) {
+	b, err := io.ReadAll(io.LimitReader(r, maxBytes+1))
 	if err != nil {
 		return "", fmt.Errorf("read file: %w", err)
 	}
-	if int64(len(b)) > MaxUploadBytes {
+	if int64(len(b)) > maxBytes {
 		return "", fmt.Errorf("file too large")
 	}
 	return string(b), nil
 }
 
-func parsePDF(r io.Reader) (string, error) {
+func parsePDF(r io.Reader, maxBytes int64) (string, error) {
 	// เขียนลง temp file ก่อน
 	tmp, err := os.CreateTemp("", "upload-*.pdf")
 	if err != nil {
@@ -47,12 +54,12 @@ func parsePDF(r io.Reader) (string, error) {
 	}
 	defer os.Remove(tmp.Name())
 
-	lr := &io.LimitedReader{R: r, N: MaxUploadBytes + 1}
+	lr := &io.LimitedReader{R: r, N: maxBytes + 1}
 	written, err := io.Copy(tmp, lr)
 	if err != nil {
 		return "", fmt.Errorf("write temp file: %w", err)
 	}
-	if written > MaxUploadBytes {
+	if written > maxBytes {
 		return "", fmt.Errorf("file too large")
 	}
 	if err := tmp.Close(); err != nil {

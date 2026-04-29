@@ -17,12 +17,20 @@ type healthDatabase interface {
 }
 
 type HealthHandler struct {
-	orch healthOrchestrator
-	db   healthDatabase
+	orch    healthOrchestrator
+	db      healthDatabase
+	timeout time.Duration
 }
 
 func NewHealthHandler(orch healthOrchestrator, db healthDatabase) *HealthHandler {
-	return &HealthHandler{orch: orch, db: db}
+	return NewHealthHandlerWithTimeout(orch, db, 5*time.Second)
+}
+
+func NewHealthHandlerWithTimeout(orch healthOrchestrator, db healthDatabase, timeout time.Duration) *HealthHandler {
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+	return &HealthHandler{orch: orch, db: db, timeout: timeout}
 }
 
 // Live ตรวจว่า process ยังตอบ HTTP ได้ โดยไม่แตะ dependency ภายนอก
@@ -41,7 +49,7 @@ func (h *HealthHandler) Check(c fiber.Ctx) error {
 
 // Ready ตรวจ dependency ที่จำเป็นก่อนรับ traffic
 func (h *HealthHandler) Ready(c fiber.Ctx) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), h.timeout)
 	defer cancel()
 
 	status := fiber.Map{
