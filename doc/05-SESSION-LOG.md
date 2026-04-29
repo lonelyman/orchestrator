@@ -29,7 +29,7 @@
 - รัน Go ใน Docker (`docker compose up --build`)
 - pgvector/schema init ปัจจุบันใช้ embedded goose migrations
 - ทดสอบ MacBook → iMac Server ผ่าน Postman
-- PDF Upload + tesseract OCR (tha+eng)
+- PDF Upload + Ollama AI OCR, with optional local Tesseract fallback
 - Standard Response Format: `{"data":{}}` / `{"error":{}}`
 - แยก handlers: health.go, chat.go, rag.go, response.go
 - Upload PDF จริง "บค.002-2568 OT Policy" → 5 chunks → ตอบจากเอกสาร ✅

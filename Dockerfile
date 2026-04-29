@@ -13,12 +13,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o orchestrator ./cmd/server
 # Stage 2: Run
 FROM alpine:latest
 
-# ติดตั้งเครื่องมือสำหรับ PDF text extraction และ OCR
-RUN apk add --no-cache \
-	poppler-utils \
-	tesseract-ocr \
-	tesseract-ocr-data-eng \
-	tesseract-ocr-data-tha
+# PDF text extraction and PDF-to-image rendering for Ollama OCR.
+RUN apk add --no-cache poppler-utils
 
 WORKDIR /app
 

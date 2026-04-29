@@ -43,7 +43,7 @@
 
 ```
 orchestrator/
-├── Dockerfile                          ← Multi-stage (Go + poppler + tesseract)
+├── Dockerfile                          ← Multi-stage (Go + poppler, Ollama OCR)
 ├── docker-compose.yml                  ← postgres + orchestrator + webui
 ├── .env / .env.example
 ├── go.mod / go.sum
