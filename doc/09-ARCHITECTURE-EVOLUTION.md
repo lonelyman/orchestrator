@@ -177,47 +177,46 @@ LLM อธิบายตัวเลขเป็นภาษาไทย
 
 ---
 
-### Gap C — Tool/Function Calling ใน LLMPort ยังไม่มี
+### Gap C — Tool/Function Calling ใน LLMPort ✅ Foundation Done
 
-**ปัญหา:** ปัจจุบัน `LLMPort.Chat()` รับแค่ messages ส่งกลับ string → LLM **เรียก tool ไม่ได้**
+**สถานะ:** เพิ่ม foundation แล้ว โดยยังคง backward compatibility:
+- `LLMPort.Chat()` เดิมยังใช้ได้
+- เพิ่ม `LLMPort.ChatWithTools(ctx, models.LLMChatRequest)` สำหรับ tool definitions
+- `OllamaAdapter` ส่ง `tools` ไป `/api/chat` และ parse `message.tool_calls`
+- `OpenAICompatibleAdapter` ส่ง OpenAI-style `tools/tool_choice` และ parse `choices[].message.tool_calls`
+- ใช้ `models.Tool`, `models.ToolCall`, `models.ToolResult` เดิมเป็น shared contract
 
 **สำคัญ เพราะ:**
 - Web search, Analytics, MCP ทั้งหมดเป็น **tools ที่ LLM ต้องเรียก**
 - Ollama (qwen2.5) รองรับ tool calling แล้ว
 - vLLM รองรับ OpenAI-style function calling
 
-**ออกแบบที่ควรเป็น:**
+**Contract ปัจจุบัน:**
 
 ```go
-// แทน Chat() เดิม → Chat() v2
 type LLMPort interface {
-    Chat(ctx context.Context, req ChatRequest) (ChatResponse, error)
-    ChatStream(ctx context.Context, req ChatRequest, onEvent func(StreamEvent)) error
+    Chat(ctx context.Context, messages []models.ChatMessage) (string, error)
+    ChatWithTools(ctx context.Context, req models.LLMChatRequest) (models.LLMChatResponse, error)
+    ChatStream(ctx context.Context, messages []models.ChatMessage, onChunk func(string)) error
     HealthCheck(ctx context.Context) error
 }
 
-type ChatRequest struct {
+type LLMChatRequest struct {
     Messages    []ChatMessage
-    Tools       []ToolDefinition  // ← เพิ่ม
+    Tools       []Tool
     ToolChoice  string            // "auto" | "none" | "required"
-    Temperature float32
+    Temperature *float32
     MaxTokens   int
 }
 
-type ChatResponse struct {
+type LLMChatResponse struct {
     Content   string
-    ToolCalls []ToolCall   // ← LLM อาจขอเรียก tool
-    Usage     TokenUsage
-}
-
-type StreamEvent struct {
-    Type     string  // "content" | "tool_call" | "done"
-    Content  string
-    ToolCall *ToolCall
+    ToolCalls []ToolCall
+    Usage     *TokenUsage
 }
 ```
 
-**Backward compat:** เก็บ method เดิมไว้เป็น helper ที่เรียก v2 ภายใน
+**ยังไม่ทำใน step นี้:** agent loop ยังไม่ execute tool จริง ต้องทำ Gap D ต่อ
 
 ---
 

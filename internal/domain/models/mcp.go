@@ -16,6 +16,7 @@ type ToolParam struct {
 
 // ToolCall คือการเรียกใช้ Tool จาก AI
 type ToolCall struct {
+	ID        string                 `json:"id,omitempty"`
 	ToolName  string                 `json:"tool_name"`
 	Arguments map[string]interface{} `json:"arguments"`
 }

@@ -31,15 +31,34 @@ func NewOpenAICompatibleAdapter(baseURL, model, apiKey string) *OpenAICompatible
 }
 
 type openAIChatRequest struct {
-	Model    string               `json:"model"`
-	Messages []models.ChatMessage `json:"messages"`
-	Stream   bool                 `json:"stream"`
+	Model       string               `json:"model"`
+	Messages    []models.ChatMessage `json:"messages"`
+	Stream      bool                 `json:"stream"`
+	Tools       []providerTool       `json:"tools,omitempty"`
+	ToolChoice  string               `json:"tool_choice,omitempty"`
+	Temperature *float32             `json:"temperature,omitempty"`
+	MaxTokens   int                  `json:"max_tokens,omitempty"`
 }
 
 type openAIChatResponse struct {
 	Choices []struct {
-		Message models.ChatMessage `json:"message"`
+		Message struct {
+			Role      string           `json:"role"`
+			Content   string           `json:"content"`
+			ToolCalls []openAIToolCall `json:"tool_calls"`
+		} `json:"message"`
+		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
+	Usage *models.TokenUsage `json:"usage,omitempty"`
+}
+
+type openAIToolCall struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Function struct {
+		Name      string `json:"name"`
+		Arguments any    `json:"arguments"`
+	} `json:"function"`
 }
 
 type openAIStreamResponse struct {
@@ -51,41 +70,64 @@ type openAIStreamResponse struct {
 }
 
 func (o *OpenAICompatibleAdapter) Chat(ctx context.Context, messages []models.ChatMessage) (string, error) {
+	resp, err := o.ChatWithTools(ctx, models.LLMChatRequest{Messages: messages})
+	if err != nil {
+		return "", err
+	}
+	return resp.Content, nil
+}
+
+func (o *OpenAICompatibleAdapter) ChatWithTools(ctx context.Context, req models.LLMChatRequest) (models.LLMChatResponse, error) {
 	reqBody := openAIChatRequest{
-		Model:    o.model,
-		Messages: messages,
-		Stream:   false,
+		Model:       o.model,
+		Messages:    req.Messages,
+		Stream:      false,
+		Tools:       toProviderTools(req.Tools),
+		ToolChoice:  strings.TrimSpace(req.ToolChoice),
+		Temperature: req.Temperature,
+		MaxTokens:   req.MaxTokens,
 	}
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf("marshal request: %w", err)
+		return models.LLMChatResponse{}, fmt.Errorf("marshal request: %w", err)
 	}
 
-	req, err := o.newRequest(ctx, http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	httpReq, err := o.newRequest(ctx, http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", err
+		return models.LLMChatResponse{}, err
 	}
 
-	resp, err := o.client.Do(req)
+	resp, err := o.client.Do(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("send request: %w", err)
+		return models.LLMChatResponse{}, fmt.Errorf("send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if err := checkStatus(resp, "openai-compatible chat"); err != nil {
-		return "", err
+		return models.LLMChatResponse{}, err
 	}
 
 	var chatResp openAIChatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
-		return "", fmt.Errorf("decode response: %w", err)
+		return models.LLMChatResponse{}, fmt.Errorf("decode response: %w", err)
 	}
 	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("openai-compatible chat returned no choices")
+		return models.LLMChatResponse{}, fmt.Errorf("openai-compatible chat returned no choices")
 	}
 
-	return chatResp.Choices[0].Message.Content, nil
+	choice := chatResp.Choices[0]
+	toolCalls, err := parseOpenAIToolCalls(choice.Message.ToolCalls)
+	if err != nil {
+		return models.LLMChatResponse{}, err
+	}
+
+	return models.LLMChatResponse{
+		Content:      choice.Message.Content,
+		ToolCalls:    toolCalls,
+		FinishReason: choice.FinishReason,
+		Usage:        chatResp.Usage,
+	}, nil
 }
 
 func (o *OpenAICompatibleAdapter) ChatStream(ctx context.Context, messages []models.ChatMessage, onChunk func(string)) error {
@@ -143,6 +185,26 @@ func (o *OpenAICompatibleAdapter) ChatStream(ctx context.Context, messages []mod
 	}
 
 	return scanner.Err()
+}
+
+func parseOpenAIToolCalls(rawCalls []openAIToolCall) ([]models.ToolCall, error) {
+	if len(rawCalls) == 0 {
+		return nil, nil
+	}
+
+	calls := make([]models.ToolCall, 0, len(rawCalls))
+	for _, raw := range rawCalls {
+		args, err := parseToolArguments(raw.Function.Arguments)
+		if err != nil {
+			return nil, err
+		}
+		calls = append(calls, models.ToolCall{
+			ID:        raw.ID,
+			ToolName:  raw.Function.Name,
+			Arguments: args,
+		})
+	}
+	return calls, nil
 }
 
 func (o *OpenAICompatibleAdapter) HealthCheck(ctx context.Context) error {

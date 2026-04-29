@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -32,6 +33,69 @@ func TestOpenAICompatibleAdapterChat_DecodesSuccessfulResponse(t *testing.T) {
 	}
 	if authHeader != "Bearer test-key" {
 		t.Fatalf("expected bearer auth header, got %q", authHeader)
+	}
+}
+
+func TestOpenAICompatibleAdapterChatWithTools_SendsToolsAndParsesToolCalls(t *testing.T) {
+	var reqBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"choices":[{
+				"finish_reason":"tool_calls",
+				"message":{
+					"role":"assistant",
+					"tool_calls":[{
+						"id":"call_1",
+						"type":"function",
+						"function":{"name":"web_search","arguments":"{\"query\":\"latest news\"}"}
+					}]
+				}
+			}],
+			"usage":{"prompt_tokens":10,"completion_tokens":3,"total_tokens":13}
+		}`))
+	}))
+	defer server.Close()
+
+	adapter := NewOpenAICompatibleAdapter(server.URL, "test-model", "")
+	resp, err := adapter.ChatWithTools(context.Background(), models.LLMChatRequest{
+		Messages: []models.ChatMessage{{Role: "user", Content: "search"}},
+		Tools: []models.Tool{{
+			Name:        "web_search",
+			Description: "Search current web results",
+			Parameters: map[string]models.ToolParam{
+				"query": {Type: "string", Description: "search query", Required: true},
+			},
+		}},
+		ToolChoice: "auto",
+	})
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if reqBody["tool_choice"] != "auto" {
+		t.Fatalf("expected tool_choice auto, got %v", reqBody["tool_choice"])
+	}
+	tools, ok := reqBody["tools"].([]any)
+	if !ok || len(tools) != 1 {
+		t.Fatalf("expected one tool in request, got %#v", reqBody["tools"])
+	}
+	if resp.FinishReason != "tool_calls" {
+		t.Fatalf("expected finish reason tool_calls, got %q", resp.FinishReason)
+	}
+	if len(resp.ToolCalls) != 1 {
+		t.Fatalf("expected one tool call, got %+v", resp.ToolCalls)
+	}
+	if resp.ToolCalls[0].ID != "call_1" || resp.ToolCalls[0].ToolName != "web_search" {
+		t.Fatalf("unexpected tool call: %+v", resp.ToolCalls[0])
+	}
+	if resp.ToolCalls[0].Arguments["query"] != "latest news" {
+		t.Fatalf("unexpected tool args: %+v", resp.ToolCalls[0].Arguments)
+	}
+	if resp.Usage == nil || resp.Usage.TotalTokens != 13 {
+		t.Fatalf("expected usage total 13, got %+v", resp.Usage)
 	}
 }
 

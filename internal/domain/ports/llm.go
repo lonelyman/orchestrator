@@ -13,6 +13,9 @@ type LLMPort interface {
 	// Chat ส่งข้อความและรอรับคำตอบ
 	Chat(ctx context.Context, messages []models.ChatMessage) (string, error)
 
+	// ChatWithTools ส่งข้อความพร้อม tool definitions และคืน tool calls เมื่อ model ต้องการเรียก tool
+	ChatWithTools(ctx context.Context, req models.LLMChatRequest) (models.LLMChatResponse, error)
+
 	// ChatStream ส่งข้อความและรับคำตอบแบบ stream ทีละ chunk
 	ChatStream(ctx context.Context, messages []models.ChatMessage, onChunk func(string)) error
 
