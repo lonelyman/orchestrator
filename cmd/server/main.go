@@ -4,6 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/enterprise-ai/orchestrator/config"
 	"github.com/enterprise-ai/orchestrator/internal/api/handlers"
@@ -75,6 +79,27 @@ func main() {
 	app.Post("/v1/rag/ingest", ragHandler.Ingest)
 	app.Post("/v1/rag/upload", ragHandler.Upload)
 
-	log.Printf("🚀 Server starting on port %s", cfg.APIPort)
-	log.Fatal(app.Listen(":" + cfg.APIPort))
+	// Graceful Shutdown
+	go func() {
+		log.Printf("🚀 Server starting on port %s", cfg.APIPort)
+		if err := app.Listen(":" + cfg.APIPort); err != nil {
+			log.Printf("Server error: %v", err)
+		}
+	}()
+
+	// รอ signal SIGINT (Ctrl+C) หรือ SIGTERM (Docker stop)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+
+	log.Println("⏳ Shutting down gracefully...")
+
+	// รอให้ request ที่กำลังทำอยู่เสร็จก่อน (timeout 10 วิ)
+	if err := app.ShutdownWithTimeout(25 * time.Second); err != nil {
+		log.Printf("Force shutdown: %v", err)
+	}
+
+	// ปิด PostgreSQL connection
+	pool.Close()
+	log.Println("✅ Server stopped cleanly")
 }
