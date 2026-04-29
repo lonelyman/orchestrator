@@ -594,3 +594,57 @@ iMac M1 16GB รับได้ไหม?
 - [ ] Audit Log
 - [ ] Document Management (list/delete)
 - [ ] Rate Limiting
+
+---
+
+## 15. Session Log — 2026-04-29 (late afternoon)
+
+### สิ่งที่ทำสำเร็จ
+
+#### AD/LDAP Authentication + JWT ✅
+
+**Files สร้างใหม่:**
+| ไฟล์ | หน้าที่ |
+|---|---|
+| `internal/domain/models/auth.go` | User, LoginRequest, LoginResponse, Claims |
+| `internal/infrastructure/auth/ldap.go` | LDAP Adapter เชื่อมต่อ AD |
+| `internal/infrastructure/auth/jwt.go` | JWT Generate + Verify |
+| `internal/api/handlers/auth.go` | POST /auth/login, GET /auth/me |
+| `internal/api/middleware/auth.go` | JWT Middleware |
+
+**AD Config:**
+```
+AD_SERVER=192.168.2.1
+AD_PORT=389
+AD_BASE_DN=DC=nutrition,DC=com
+AD_DOMAIN=nutrition.com
+JWT_SECRET=change-this-to-random-string-in-production
+JWT_EXPIRY=8h
+```
+
+**Routes:**
+| Method | Endpoint | Auth | หน้าที่ |
+|---|---|---|---|
+| POST | /auth/login | ❌ Public | Login ด้วย AD account |
+| GET | /auth/me | ✅ JWT | ดูข้อมูล user |
+| POST | /v1/chat/completions | ✅ JWT | Chat |
+| POST | /v1/rag/ingest | ✅ JWT | Upload text |
+| POST | /v1/rag/upload | ✅ JWT | Upload file |
+
+**ทดสอบผ่าน:**
+- Login ด้วย nipon.k@nutrition.com → JWT Token ✅
+- ดึงข้อมูล: display_name, department, email จาก AD ✅
+- Chat ด้วย JWT → RAG → ตอบจากเอกสารจริง ✅
+
+**หมายเหตุ AD:**
+- Domain จริง: `nutrition.com` (ไม่ใช่ nutritionprofess.com)
+- email ใช้ nutritionprofess.com แต่ login ใช้ nutrition.com
+- ใช้ StartTLS (InsecureSkipVerify: true)
+
+### TODO ที่ยังค้างอยู่
+
+- [ ] Session Management — จำประวัติการสนทนา
+- [ ] Audit Log — บันทึกทุก query/response
+- [ ] Role-based access — Admin vs Manager vs Employee
+- [ ] WebUI Login Integration
+- [ ] Rate Limiting per user

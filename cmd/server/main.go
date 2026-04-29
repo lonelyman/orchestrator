@@ -17,6 +17,7 @@ import (
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/auth"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/embedder"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/llm"
+	"github.com/enterprise-ai/orchestrator/internal/infrastructure/session"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/vector"
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
@@ -63,6 +64,9 @@ func main() {
 	nomicAdapter := embedder.NewNomicAdapter(ollamaURL, cfg.EmbedModel)
 	pgvectorAdapter := vector.NewPgvectorAdapter(pool)
 
+	// สร้าง Session Adapter
+	sessionAdapter := session.NewPostgresAdapter(pool, 30*time.Minute)
+
 	// สร้าง Schema
 	if err := pgvectorAdapter.InitSchema(context.Background()); err != nil {
 		slog.Error("init schema", "error", err)
@@ -72,7 +76,7 @@ func main() {
 
 	// สร้าง Core
 	ragEngine := rag.New(nomicAdapter, pgvectorAdapter)
-	orch := orchestrator.New(ollamaAdapter, ragEngine, cfg.SystemPrompt)
+	orch := orchestrator.New(ollamaAdapter, ragEngine, sessionAdapter, cfg.SystemPrompt)
 
 	// สร้าง Auth
 	ldapAdapter := auth.NewLDAPAdapter(cfg.ADServer, cfg.ADPort, cfg.ADBaseDN, cfg.ADDomain)
@@ -96,6 +100,7 @@ func main() {
 
 	// Protected routes (ต้อง login)
 	protected := app.Group("/", middleware.JWTMiddleware(jwtManager))
+	protected.Use(middleware.SessionMiddleware(sessionAdapter))
 	protected.Get("/auth/me", authHandler.Me)
 	protected.Post("/v1/chat/completions", chatHandler.Completions)
 	protected.Post("/v1/rag/ingest", ragHandler.Ingest)

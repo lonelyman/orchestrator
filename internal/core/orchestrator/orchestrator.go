@@ -12,131 +12,178 @@ import (
 	"github.com/enterprise-ai/orchestrator/internal/domain/ports"
 )
 
-// Orchestrator คือสมองกลางของระบบ
+const historyLimit = 10 // Sliding Window — ดึงแค่ 10 messages ล่าสุด
+
 type Orchestrator struct {
 	llm          ports.LLMPort
 	rag          *rag.RAGEngine
+	session      ports.SessionPort
 	classifier   *intent.Classifier
 	systemPrompt string
 }
 
-// New สร้าง Orchestrator ใหม่
-func New(llm ports.LLMPort, rag *rag.RAGEngine, systemPrompt string) *Orchestrator {
+func New(llm ports.LLMPort, rag *rag.RAGEngine, session ports.SessionPort, systemPrompt string) *Orchestrator {
 	if strings.TrimSpace(systemPrompt) == "" {
 		systemPrompt = "You are a helpful enterprise AI assistant. You must always respond in Thai language only."
 	}
-
 	return &Orchestrator{
 		llm:          llm,
 		rag:          rag,
+		session:      session,
 		classifier:   intent.New(),
 		systemPrompt: systemPrompt,
 	}
 }
 
-// Chat รับ request และส่งคำตอบกลับ
 func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string, error) {
 	if len(req.Messages) == 0 {
-		return "", fmt.Errorf("invalid request: messages is required")
+		return "", fmt.Errorf("messages is required")
 	}
 
-	// ดึงคำถามล่าสุด — กรอง WebUI format ออก
 	lastMsg := req.Messages[len(req.Messages)-1].Content
 
-	// ถ้า WebUI ส่งมาเป็น chat_history format ให้ดึงคำถามล่าสุดออก
-	if strings.Contains(lastMsg, "<chat_history>") {
-		lines := strings.Split(lastMsg, "\n")
-		for i := len(lines) - 1; i >= 0; i-- {
-			line := strings.TrimSpace(lines[i])
-			if after, ok := strings.CutPrefix(line, "USER:"); ok {
-				lastMsg = strings.TrimSpace(after)
-				break
+	// ดึง Session History (Sliding Window)
+	var historyMessages []models.ChatMessage
+	sessionID, _ := ctx.Value("session_id").(string)
+	if sessionID != "" && o.session != nil {
+		history, err := o.session.GetHistory(ctx, sessionID, historyLimit)
+		if err == nil {
+			for _, h := range history {
+				historyMessages = append(historyMessages, models.ChatMessage{
+					Role:    h.Role,
+					Content: h.Content,
+				})
 			}
 		}
 	}
 
-	// Phase 3: Intent Classification
+	// Intent Classification
 	intentResult := o.classifier.Classify(lastMsg)
-	slog.Info("intent", "query", lastMsg, "intent", intentResult.Intent, "confidence", intentResult.Confidence, "reason", intentResult.Reason)
+	slog.Info("intent classified",
+		"query", lastMsg,
+		"intent", intentResult.Intent,
+		"confidence", intentResult.Confidence,
+	)
 
 	systemContent := o.systemPrompt
 
 	switch intentResult.Intent {
 	case models.IntentRAG:
-		// ค้นหาจาก Vector DB
 		docs, err := o.rag.Search(ctx, lastMsg, 3)
-		slog.Info("rag search", "docs", len(docs), "err", err)
+		slog.Info("rag search", "docs", len(docs), "error", err)
 		if err == nil && len(docs) > 0 {
 			ragContext := o.rag.BuildContext(docs)
-			systemContent = systemContent + "\n\nUse the following information to answer the question:\n\n" + ragContext
+			systemContent = systemContent + "\n\nUse the following information to answer:\n\n" + ragContext
 		}
-
 	case models.IntentMCP:
-		// TODO: Phase 2 MCP — เมื่อมี SQL Server จริง
-		slog.Info("mcp intent detected, falling back to direct")
-
+		slog.Info("mcp intent - not connected yet")
 	case models.IntentDirect:
-		// ตอบตรงๆ ไม่ต้องค้นหาอะไร
 		slog.Info("direct intent")
 	}
 
-	// รวม system prompt + messages
-	messages := append([]models.ChatMessage{
-		{Role: "system", Content: systemContent},
-	}, req.Messages...)
+	// รวม system + history + คำถามใหม่
+	messages := []models.ChatMessage{{Role: "system", Content: systemContent}}
+	messages = append(messages, historyMessages...)
+	messages = append(messages, req.Messages[len(req.Messages)-1])
 
 	result, err := o.llm.Chat(ctx, messages)
 	if err != nil {
 		return "", fmt.Errorf("llm chat: %w", err)
 	}
 
+	// บันทึก messages ลง DB
+	if sessionID != "" && o.session != nil {
+		userMsg := models.Message{
+			SessionID: sessionID,
+			Role:      "user",
+			Content:   lastMsg,
+			Metadata:  map[string]any{"intent": string(intentResult.Intent)},
+		}
+		assistantMsg := models.Message{
+			SessionID: sessionID,
+			Role:      "assistant",
+			Content:   result,
+		}
+		go o.session.SaveMessage(context.Background(), userMsg)
+		go o.session.SaveMessage(context.Background(), assistantMsg)
+	}
+
 	return result, nil
 }
 
-// ChatStream รับ request และ stream คำตอบกลับทีละ chunk
 func (o *Orchestrator) ChatStream(ctx context.Context, req models.ChatRequest, onChunk func(string)) error {
-	slog.Info("chatstream called", "messages", len(req.Messages))
+	slog.Info("chat stream started", "messages", len(req.Messages))
 
 	if len(req.Messages) == 0 {
 		return fmt.Errorf("messages is required")
 	}
 
-	// ดึงคำถามล่าสุด
 	lastMsg := req.Messages[len(req.Messages)-1].Content
+
+	// ดึง Session History
+	var historyMessages []models.ChatMessage
+	sessionID, _ := ctx.Value("session_id").(string)
+	if sessionID != "" && o.session != nil {
+		history, err := o.session.GetHistory(ctx, sessionID, historyLimit)
+		if err == nil {
+			for _, h := range history {
+				historyMessages = append(historyMessages, models.ChatMessage{
+					Role:    h.Role,
+					Content: h.Content,
+				})
+			}
+		}
+	}
 
 	// Intent Classification
 	intentResult := o.classifier.Classify(lastMsg)
-	slog.Info("chatstream intent", "intent", intentResult.Intent)
-
 	systemContent := o.systemPrompt
 
-	// RAG Search เหมือน Chat
 	if intentResult.Intent == models.IntentRAG {
 		docs, err := o.rag.Search(ctx, lastMsg, 3)
 		if err == nil && len(docs) > 0 {
 			ragContext := o.rag.BuildContext(docs)
-			systemContent = systemContent + "\n\nUse the following information to answer the question:\n\n" + ragContext
+			systemContent = systemContent + "\n\nUse the following information to answer:\n\n" + ragContext
 		}
 	}
 
-	messages := append([]models.ChatMessage{
-		{Role: "system", Content: systemContent},
-	}, req.Messages...)
+	// รวม system + history + คำถามใหม่
+	messages := []models.ChatMessage{{Role: "system", Content: systemContent}}
+	messages = append(messages, historyMessages...)
+	messages = append(messages, req.Messages[len(req.Messages)-1])
 
+	// Collect full response สำหรับบันทึก
+	var fullResponse strings.Builder
 	err := o.llm.ChatStream(ctx, messages, func(chunk string) {
-		slog.Debug("chunk received", "chunk", chunk)
+		fullResponse.WriteString(chunk)
 		onChunk(chunk)
 	})
-	slog.Info("chatstream done", "err", err)
+
+	// บันทึก messages ลง DB
+	if sessionID != "" && o.session != nil && err == nil {
+		userMsg := models.Message{
+			SessionID: sessionID,
+			Role:      "user",
+			Content:   lastMsg,
+			Metadata:  map[string]any{"intent": string(intentResult.Intent)},
+		}
+		assistantMsg := models.Message{
+			SessionID: sessionID,
+			Role:      "assistant",
+			Content:   fullResponse.String(),
+		}
+		go o.session.SaveMessage(context.Background(), userMsg)
+		go o.session.SaveMessage(context.Background(), assistantMsg)
+	}
+
+	slog.Info("chat stream done", "error", err)
 	return err
 }
 
-// HealthCheck ตรวจสอบว่าระบบพร้อมใช้งาน
 func (o *Orchestrator) HealthCheck(ctx context.Context) error {
 	return o.llm.HealthCheck(ctx)
 }
 
-// EmbedderCheck ตรวจสอบว่า Embedder พร้อมใช้งาน
 func (o *Orchestrator) EmbedderCheck(ctx context.Context) error {
 	result, err := o.rag.Embedder().Embed(ctx, "health check")
 	if err != nil {

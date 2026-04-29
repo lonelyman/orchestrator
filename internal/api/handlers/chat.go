@@ -25,18 +25,25 @@ func (h *ChatHandler) Completions(c fiber.Ctx) error {
 		return Fail(c, 400, "invalid request", "BAD_REQUEST")
 	}
 
-	// Stream mode
+	// ดึง session_id จาก middleware
+	sessionID, _ := c.Locals("session_id").(string)
+
+	// ใส่ session_id เข้า context
+	ctx := context.WithValue(context.Background(), "session_id", sessionID)
+	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
+	defer cancel()
+
 	if req.Stream {
 		c.Set("Content-Type", "text/event-stream")
 		c.Set("Cache-Control", "no-cache")
 		c.Set("Connection", "keep-alive")
 
-		// ใช้ Background context ที่ไม่ถูก cancel โดย Fiber
-		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		streamCtx := context.WithValue(context.Background(), "session_id", sessionID)
+		streamCtx, streamCancel := context.WithTimeout(streamCtx, 120*time.Second)
 
 		return c.SendStreamWriter(func(w *bufio.Writer) {
-			defer cancel()
-			h.orch.ChatStream(ctx, req, func(chunk string) {
+			defer streamCancel()
+			h.orch.ChatStream(streamCtx, req, func(chunk string) {
 				id := fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano())
 				data := fmt.Sprintf(`{"id":"%s","object":"chat.completion.chunk","model":"%s","choices":[{"delta":{"content":%q},"index":0}]}`,
 					id, req.Model, chunk)
@@ -47,10 +54,6 @@ func (h *ChatHandler) Completions(c fiber.Ctx) error {
 			w.Flush()
 		})
 	}
-
-	// Non-stream mode
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
 
 	result, err := h.orch.Chat(ctx, req)
 	if err != nil {
