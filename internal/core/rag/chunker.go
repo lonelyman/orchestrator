@@ -11,8 +11,8 @@ type ChunkOptions struct {
 // DefaultChunkOptions ค่า default ที่เหมาะสม
 func DefaultChunkOptions() ChunkOptions {
 	return ChunkOptions{
-		ChunkSize:    500,
-		ChunkOverlap: 50,
+		ChunkSize:    200, // ลดจาก 500 → 200
+		ChunkOverlap: 20,  // ลดจาก 50 → 20
 	}
 }
 

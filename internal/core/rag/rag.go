@@ -27,6 +27,12 @@ func New(embedder ports.EmbedderPort, vector ports.VectorPort) *RAGEngine {
 
 // Ingest รับข้อความและบันทึกลง Vector DB
 func (r *RAGEngine) Ingest(ctx context.Context, content, source string) error {
+	// Clean text — เอา extra whitespace ออก
+	content = strings.Join(strings.Fields(content), " ")
+
+	if len(content) == 0 {
+		return fmt.Errorf("empty content")
+	}
 	// แปลงข้อความเป็น Vector
 	embedding, err := r.embedder.Embed(ctx, content)
 	if err != nil {
@@ -81,4 +87,9 @@ func (r *RAGEngine) BuildContext(docs []models.Document) string {
 	}
 
 	return sb.String()
+}
+
+// Embedder คืน EmbedderPort
+func (r *RAGEngine) Embedder() ports.EmbedderPort {
+	return r.embedder
 }

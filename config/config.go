@@ -13,6 +13,9 @@ type AppConfig struct {
 	LLMPort    string
 	LLMModel   string
 
+	// Embedder
+	EmbedModel string
+
 	// Database
 	DBHost string
 	DBPort string
@@ -32,6 +35,7 @@ func Load() *AppConfig {
 		LLMHost:    getEnv("LLM_HOST", "localhost"),
 		LLMPort:    getEnv("LLM_PORT", "11434"),
 		LLMModel:   getEnv("LLM_MODEL", "qwen2.5:7b"),
+		EmbedModel: getEnv("EMBED_MODEL", "nomic-embed-text"),
 		DBHost:     getEnv("DB_HOST", "localhost"),
 		DBPort:     getEnv("DB_PORT", "5432"),
 		DBName:     getEnv("DB_NAME", "orchestrator"),

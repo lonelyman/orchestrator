@@ -3,9 +3,10 @@ package orchestrator
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 
+	"github.com/enterprise-ai/orchestrator/internal/core/intent"
 	"github.com/enterprise-ai/orchestrator/internal/core/rag"
 	"github.com/enterprise-ai/orchestrator/internal/domain/models"
 	"github.com/enterprise-ai/orchestrator/internal/domain/ports"
@@ -15,6 +16,7 @@ import (
 type Orchestrator struct {
 	llm          ports.LLMPort
 	rag          *rag.RAGEngine
+	classifier   *intent.Classifier
 	systemPrompt string
 }
 
@@ -24,7 +26,12 @@ func New(llm ports.LLMPort, rag *rag.RAGEngine, systemPrompt string) *Orchestrat
 		systemPrompt = "You are a helpful enterprise AI assistant. You must always respond in Thai language only."
 	}
 
-	return &Orchestrator{llm: llm, rag: rag, systemPrompt: systemPrompt}
+	return &Orchestrator{
+		llm:          llm,
+		rag:          rag,
+		classifier:   intent.New(),
+		systemPrompt: systemPrompt,
+	}
 }
 
 // Chat รับ request และส่งคำตอบกลับ
@@ -33,22 +40,47 @@ func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string
 		return "", fmt.Errorf("invalid request: messages is required")
 	}
 
-	// ดึงคำถามล่าสุด
+	// ดึงคำถามล่าสุด — กรอง WebUI format ออก
 	lastMsg := req.Messages[len(req.Messages)-1].Content
 
-	// ค้นหา context จาก RAG
-	docs, err := o.rag.Search(ctx, lastMsg, 3)
-	log.Printf("RAG Search: query=%s, docs=%d, err=%v", lastMsg, len(docs), err)
-
-	var systemContent string
-	systemContent = o.systemPrompt
-
-	if err == nil && len(docs) > 0 {
-		ragContext := o.rag.BuildContext(docs)
-		systemContent = systemContent + "\n\nUse the following information to answer the question:\n\n" + ragContext
+	// ถ้า WebUI ส่งมาเป็น chat_history format ให้ดึงคำถามล่าสุดออก
+	if strings.Contains(lastMsg, "<chat_history>") {
+		lines := strings.Split(lastMsg, "\n")
+		for i := len(lines) - 1; i >= 0; i-- {
+			line := strings.TrimSpace(lines[i])
+			if after, ok := strings.CutPrefix(line, "USER:"); ok {
+				lastMsg = strings.TrimSpace(after)
+				break
+			}
+		}
 	}
 
-	// รวม system prompt + RAG context + messages
+	// Phase 3: Intent Classification
+	intentResult := o.classifier.Classify(lastMsg)
+	slog.Info("intent", "query", lastMsg, "intent", intentResult.Intent, "confidence", intentResult.Confidence, "reason", intentResult.Reason)
+
+	systemContent := o.systemPrompt
+
+	switch intentResult.Intent {
+	case models.IntentRAG:
+		// ค้นหาจาก Vector DB
+		docs, err := o.rag.Search(ctx, lastMsg, 3)
+		slog.Info("rag search", "docs", len(docs), "err", err)
+		if err == nil && len(docs) > 0 {
+			ragContext := o.rag.BuildContext(docs)
+			systemContent = systemContent + "\n\nUse the following information to answer the question:\n\n" + ragContext
+		}
+
+	case models.IntentMCP:
+		// TODO: Phase 2 MCP — เมื่อมี SQL Server จริง
+		slog.Info("mcp intent detected, falling back to direct")
+
+	case models.IntentDirect:
+		// ตอบตรงๆ ไม่ต้องค้นหาอะไร
+		slog.Info("direct intent")
+	}
+
+	// รวม system prompt + messages
 	messages := append([]models.ChatMessage{
 		{Role: "system", Content: systemContent},
 	}, req.Messages...)
@@ -63,10 +95,55 @@ func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string
 
 // ChatStream รับ request และ stream คำตอบกลับทีละ chunk
 func (o *Orchestrator) ChatStream(ctx context.Context, req models.ChatRequest, onChunk func(string)) error {
-	return o.llm.ChatStream(ctx, req.Messages, onChunk)
+	slog.Info("chatstream called", "messages", len(req.Messages))
+
+	if len(req.Messages) == 0 {
+		return fmt.Errorf("messages is required")
+	}
+
+	// ดึงคำถามล่าสุด
+	lastMsg := req.Messages[len(req.Messages)-1].Content
+
+	// Intent Classification
+	intentResult := o.classifier.Classify(lastMsg)
+	slog.Info("chatstream intent", "intent", intentResult.Intent)
+
+	systemContent := o.systemPrompt
+
+	// RAG Search เหมือน Chat
+	if intentResult.Intent == models.IntentRAG {
+		docs, err := o.rag.Search(ctx, lastMsg, 3)
+		if err == nil && len(docs) > 0 {
+			ragContext := o.rag.BuildContext(docs)
+			systemContent = systemContent + "\n\nUse the following information to answer the question:\n\n" + ragContext
+		}
+	}
+
+	messages := append([]models.ChatMessage{
+		{Role: "system", Content: systemContent},
+	}, req.Messages...)
+
+	err := o.llm.ChatStream(ctx, messages, func(chunk string) {
+		slog.Debug("chunk received", "chunk", chunk)
+		onChunk(chunk)
+	})
+	slog.Info("chatstream done", "err", err)
+	return err
 }
 
 // HealthCheck ตรวจสอบว่าระบบพร้อมใช้งาน
 func (o *Orchestrator) HealthCheck(ctx context.Context) error {
 	return o.llm.HealthCheck(ctx)
+}
+
+// EmbedderCheck ตรวจสอบว่า Embedder พร้อมใช้งาน
+func (o *Orchestrator) EmbedderCheck(ctx context.Context) error {
+	result, err := o.rag.Embedder().Embed(ctx, "health check")
+	if err != nil {
+		return err
+	}
+	if len(result) == 0 {
+		return fmt.Errorf("empty embedding returned")
+	}
+	return nil
 }

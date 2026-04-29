@@ -28,6 +28,7 @@ services:
       build: .
       container_name: orchestrator-api
       restart: unless-stopped
+      stop_grace_period: 30s
       env_file:
          - .env
       environment:
@@ -63,24 +64,47 @@ services:
          - "host.docker.internal:host-gateway"
 
    # ============================================================
-   # MONITORING (เตรียมไว้ — เปิดใช้ตอน Production)
+   # MONITORING — Loki + Grafana (Log Aggregation)
+   # ติดตั้งบนเครื่อง Monitoring แยกต่างหาก ไม่ใช่เครื่อง AI
+   # Spec เครื่อง Monitoring: 2-4 CPU, RAM 4-8 GB, SSD 100-200 GB
    # ============================================================
-   # prometheus:
-   #   image: prom/prometheus:latest
-   #   container_name: orchestrator-prometheus
+   #
+   # TODO ก่อนเปิดใช้งาน:
+   #
+   # 1. ติดตั้ง Loki Docker Driver บนเครื่อง AI:
+   #    docker plugin install grafana/loki-docker-driver:latest \
+   #      --alias loki --grant-all-permissions
+   #
+   # 2. เพิ่ม logging block ใน orchestrator service บนเครื่อง AI:
+   #    logging:
+   #      driver: loki
+   #      options:
+   #        loki-url: "http://<IP-เครื่อง-Monitoring>:3100/loki/api/v1/push"
+   #
+   # 3. Deploy ไฟล์นี้บนเครื่อง Monitoring (uncomment loki + grafana ด้านล่าง)
+   #
+   # 4. เปิด Grafana: http://<IP-เครื่อง-Monitoring>:53001
+   #    - Add datasource → Loki → http://loki:3100
+   #    - Query log: {container="orchestrator-api"} | json | level="ERROR"
+   #
+   # 5. เปลี่ยน GF_SECURITY_ADMIN_PASSWORD ก่อน deploy จริง
+   # ============================================================
+
+   # loki:
+   #   image: grafana/loki:latest
+   #   container_name: orchestrator-loki
    #   restart: unless-stopped
-   #   volumes:
-   #     - ./prometheus.yml:/etc/prometheus/prometheus.yml
-   #     - prometheus_data:/prometheus
    #   ports:
-   #     - "59090:9090"
+   #     - "3100:3100"
+   #   volumes:
+   #     - loki_data:/loki
 
    # grafana:
    #   image: grafana/grafana:latest
    #   container_name: orchestrator-grafana
    #   restart: unless-stopped
    #   depends_on:
-   #     - prometheus
+   #     - loki
    #   environment:
    #     GF_SECURITY_ADMIN_PASSWORD: changeme
    #   volumes:
@@ -120,6 +144,6 @@ services:
 volumes:
    postgres_data:
    webui_data:
-   # prometheus_data:
+   # loki_data:
    # grafana_data:
    # vllm_models:

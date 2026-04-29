@@ -3,7 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/enterprise-ai/orchestrator/config"
 	"github.com/enterprise-ai/orchestrator/internal/api/handlers"
@@ -19,8 +23,15 @@ import (
 )
 
 func main() {
+	// ตั้งค่า Structured Logger
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
 	// โหลด config
 	cfg := config.Load()
+	slog.Info("config loaded", "port", cfg.APIPort, "model", cfg.LLMModel, "embed", cfg.EmbedModel)
 
 	// เชื่อมต่อ PostgreSQL
 	dbURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
@@ -28,7 +39,8 @@ func main() {
 
 	poolConfig, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
-		log.Fatalf("parse db config: %v", err)
+		slog.Error("parse db config", "error", err)
+		os.Exit(1)
 	}
 
 	poolConfig.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
@@ -37,29 +49,31 @@ func main() {
 
 	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
 	if err != nil {
-		log.Fatalf("connect postgres: %v", err)
+		slog.Error("connect postgres", "error", err)
+		os.Exit(1)
 	}
 	defer pool.Close()
-	log.Println("✅ PostgreSQL connected")
+	slog.Info("postgresql connected")
 
 	// สร้าง Adapters
 	ollamaURL := fmt.Sprintf("http://%s:%s", cfg.LLMHost, cfg.LLMPort)
 	ollamaAdapter := llm.NewOllamaAdapter(ollamaURL, cfg.LLMModel)
-	nomicAdapter := embedder.NewNomicAdapter(ollamaURL)
+	nomicAdapter := embedder.NewNomicAdapter(ollamaURL, cfg.EmbedModel)
 	pgvectorAdapter := vector.NewPgvectorAdapter(pool)
 
 	// สร้าง Schema
 	if err := pgvectorAdapter.InitSchema(context.Background()); err != nil {
-		log.Fatalf("init schema: %v", err)
+		slog.Error("init schema", "error", err)
+		os.Exit(1)
 	}
-	log.Println("✅ pgvector schema ready")
+	slog.Info("pgvector schema ready")
 
 	// สร้าง Core
 	ragEngine := rag.New(nomicAdapter, pgvectorAdapter)
 	orch := orchestrator.New(ollamaAdapter, ragEngine, cfg.SystemPrompt)
 
 	// สร้าง Handlers
-	healthHandler := handlers.NewHealthHandler(orch)
+	healthHandler := handlers.NewHealthHandler(orch, pgvectorAdapter)
 	chatHandler := handlers.NewChatHandler(orch)
 	ragHandler := handlers.NewRAGHandler(ragEngine)
 
@@ -70,10 +84,27 @@ func main() {
 
 	// Routes
 	app.Get("/health", healthHandler.Check)
+	app.Get("/v1/models", chatHandler.Models)
 	app.Post("/v1/chat/completions", chatHandler.Completions)
 	app.Post("/v1/rag/ingest", ragHandler.Ingest)
 	app.Post("/v1/rag/upload", ragHandler.Upload)
 
-	log.Printf("🚀 Server starting on port %s", cfg.APIPort)
-	log.Fatal(app.Listen(":" + cfg.APIPort))
+	// Graceful Shutdown
+	go func() {
+		slog.Info("server starting", "port", cfg.APIPort)
+		if err := app.Listen(":" + cfg.APIPort); err != nil {
+			slog.Error("server error", "error", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+
+	slog.Info("shutting down gracefully...")
+	if err := app.ShutdownWithTimeout(10 * time.Second); err != nil {
+		slog.Error("force shutdown", "error", err)
+	}
+	pool.Close()
+	slog.Info("server stopped cleanly")
 }
