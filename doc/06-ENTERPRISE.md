@@ -83,6 +83,45 @@ TODO:
 - [ ] Admin Panel จัดการสิทธิ์
 ```
 
+### Document Access Control (Deferred)
+
+สถานะปัจจุบัน:
+- ระบบ RAG ยังไม่มี `access_level`, owner, department, document group, version, หรือ expiry ใน schema
+- Search ยังไม่ได้ filter เอกสารตาม role/department ของ user
+- ยังไม่ควรเดานโยบายสิทธิ์เองในโค้ด เพราะอาจทำให้พนักงานเห็นเอกสารผิดกลุ่มหรือบล็อกเอกสารที่ควรเห็น
+
+Policy ที่ต้องตัดสินใจก่อนลงโค้ด:
+- Role ไหนเห็นเอกสารระดับ `Public`, `Internal`, `Confidential` ได้บ้าง
+- ใช้ role อย่างเดียวพอไหม หรือต้องใช้ department/site/company ด้วย
+- เอกสาร HR, ผู้บริหาร, การเงิน, สินค้า, และประกาศทั่วไปแยกสิทธิ์อย่างไร
+- ต้องมี document owner/approver หรือ expiry/review date หรือไม่
+- ถ้าเอกสารไม่มี metadata ให้ default เป็น allow หรือ deny
+
+แนวทาง technical เมื่อ policy พร้อม:
+- เพิ่ม metadata ใน `documents` table เช่น `access_level`, `department`, `owner`, `version`, `expires_at`
+- ตอน ingest ต้องรับ metadata และ validate ค่า
+- ตอน search ต้อง filter ก่อนส่ง context เข้า LLM
+- เพิ่ม audit field สำหรับ sources ที่ถูกใช้ตอบ
+
+### LDAP / Active Directory TLS (Deferred)
+
+สถานะปัจจุบัน:
+- ตอนนี้ระบบใช้งานผ่าน `DEV_MODE` เป็นหลัก
+- ยังไม่สามารถเข้าถึง AD server จริงเพื่อทดสอบ authentication path ได้
+- จึงยังไม่แก้โค้ด LDAP/TLS ในรอบนี้ เพื่อลดความเสี่ยงจากการเปลี่ยน behavior โดยไม่มี environment ยืนยันผล
+
+Production risk ที่ต้องกลับมาแก้ก่อนใช้ AD จริง:
+- LDAP connection ต้องใช้ TLS ที่ verify certificate ได้จริง
+- ห้ามใช้ `InsecureSkipVerify` ใน production
+- ถ้า `StartTLS` หรือ LDAPS fail ต้อง fail closed ไม่ควร bind ต่อแบบไม่ปลอดภัย
+- ควรแยก config สำหรับ dev/test/prod เช่น `AD_USE_TLS`, `AD_TLS_INSECURE_SKIP_VERIFY`, และ `AD_CA_CERT_PATH`
+
+เงื่อนไขก่อนเริ่มแก้:
+- มี AD/LDAP test environment หรือช่องทางเข้าถึง server จริง
+- รู้ port/protocol ที่องค์กรใช้จริง: LDAP+StartTLS หรือ LDAPS
+- มี CA certificate หรือ trust chain ที่ server ใช้
+- มี test account สำหรับตรวจ login success/failure
+
 ---
 
 ## Audit Log (TODO — ตลาดหลักทรัพย์ต้องมี)
@@ -109,6 +148,11 @@ TODO:
 - [ ] GET /v1/admin/logs
 - [ ] Log retention policy
 ```
+
+หมายเหตุเรื่อง log:
+- Application log (`slog`/stdout) ไม่ควรเก็บ prompt, document text, หรือ response เต็ม
+- Application log ควรเก็บเฉพาะ metadata เช่น user/session id, intent, latency, status, text length
+- Audit log เป็น compliance store แยกต่างหาก ต้องมี RBAC, retention policy, และการจำกัดสิทธิ์เข้าถึง
 
 ---
 

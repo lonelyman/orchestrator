@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"log/slog"
 	"strings"
 	"time"
@@ -58,7 +59,10 @@ func AuditMiddleware(auditPort ports.AuditPort) fiber.Handler {
 
 		// บันทึกแบบ async
 		go func() {
-			if saveErr := auditPort.Save(c.Context(), log); saveErr != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			if saveErr := auditPort.Save(ctx, log); saveErr != nil {
 				slog.Error("save audit log failed", "error", saveErr)
 			}
 		}()

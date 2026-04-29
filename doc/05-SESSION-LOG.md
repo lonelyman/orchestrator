@@ -27,7 +27,7 @@
 - สร้าง .env.example, .gitignore, README.md
 - git merge dev → main (แก้ conflict)
 - รัน Go ใน Docker (`docker compose up --build`)
-- pgvector auto-init ผ่าน `docker/init/01-extensions.sql`
+- pgvector/schema init ปัจจุบันใช้ embedded goose migrations
 - ทดสอบ MacBook → iMac Server ผ่าน Postman
 - PDF Upload + tesseract OCR (tha+eng)
 - Standard Response Format: `{"data":{}}` / `{"error":{}}`
@@ -103,7 +103,7 @@
 **Files สร้างใหม่:**
 | ไฟล์ | หน้าที่ |
 |---|---|
-| `docker/init/03-audit.sql` | audit_logs table + indexes |
+| `internal/infrastructure/migrations/sql/00003_audit.sql` | audit_logs table + indexes |
 | `internal/domain/models/audit.go` | AuditLog, AuditLogFilter |
 | `internal/domain/ports/audit.go` | AuditPort interface |
 | `internal/infrastructure/audit/postgres.go` | PostgreSQL adapter |

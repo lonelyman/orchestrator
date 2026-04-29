@@ -6,10 +6,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/enterprise-ai/orchestrator/internal/domain/models"
 )
+
+const maxErrorBodyBytes = 4 << 10
 
 // OllamaAdapter implement LLMPort สำหรับ Ollama
 type OllamaAdapter struct {
@@ -23,7 +29,7 @@ func NewOllamaAdapter(baseURL, model string) *OllamaAdapter {
 	return &OllamaAdapter{
 		baseURL: baseURL,
 		model:   model,
-		client:  &http.Client{},
+		client:  newHTTPClient(),
 	}
 }
 
@@ -65,6 +71,10 @@ func (o *OllamaAdapter) Chat(ctx context.Context, messages []models.ChatMessage)
 	}
 	defer resp.Body.Close()
 
+	if err := checkStatus(resp, "ollama chat"); err != nil {
+		return "", err
+	}
+
 	var ollamaResp ollamaResponse
 	if err := json.NewDecoder(resp.Body).Decode(&ollamaResp); err != nil {
 		return "", fmt.Errorf("decode response: %w", err)
@@ -98,6 +108,10 @@ func (o *OllamaAdapter) ChatStream(ctx context.Context, messages []models.ChatMe
 	}
 	defer resp.Body.Close()
 
+	if err := checkStatus(resp, "ollama chat stream"); err != nil {
+		return err
+	}
+
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
 		var chunk ollamaResponse
@@ -128,9 +142,38 @@ func (o *OllamaAdapter) HealthCheck(ctx context.Context) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("ollama returned status: %d", resp.StatusCode)
+	if err := checkStatus(resp, "ollama health"); err != nil {
+		return err
 	}
 
 	return nil
+}
+
+func newHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 30 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			IdleConnTimeout:       90 * time.Second,
+		},
+	}
+}
+
+func checkStatus(resp *http.Response, operation string) error {
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
+	message := strings.TrimSpace(string(body))
+	if message == "" {
+		return fmt.Errorf("%s returned status %d", operation, resp.StatusCode)
+	}
+	return fmt.Errorf("%s returned status %d: %s", operation, resp.StatusCode, message)
 }

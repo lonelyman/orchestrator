@@ -21,18 +21,21 @@
 ### Priority สูง
 - [ ] **Audit Log** — บันทึกทุก query/response (ตลาดหลักทรัพย์ต้องมี)
 - [ ] **Role-based Access** — Admin vs Manager vs Employee
+- [ ] **Document Access Control** — Deferred until policy is defined
 - [ ] **Rate Limiting** — จำกัด request per user
-- [ ] **Config Validation** — Fail-fast เมื่อ .env ผิด
+- [x] **Config Validation** — Fail-fast เมื่อ .env ผิด
+- [ ] **LDAP TLS Hardening** — บังคับ verify certificate ก่อนใช้ AD จริง
 
 ### Priority กลาง
 - [ ] **WebUI Login** — เชื่อม Open WebUI กับ Auth
 - [ ] **Document Management** — list/delete endpoints
 - [ ] **Circuit Breaker** — ถ้า Ollama ล่ม
+- [ ] **vLLM Adapter** — เพิ่ม OpenAI-compatible adapter และใช้ `LLM_BACKEND` เลือก backend
 - [ ] **LLM-based Intent Classifier** — แม่นยำกว่า rule-based
 
 ### Priority ต่ำ (Phase 4)
 - [ ] **Monitoring** — Prometheus + Grafana (commented ใน docker-compose)
-- [ ] **golang-migrate** — แทน InitSchema()
+- [x] **Goose migrations** — แทน `docker/init` และ `InitSchema()`
 - [ ] **OpenTelemetry** — Distributed Tracing
 - [ ] **OCR Worker** — แยกเป็น Background Process
 - [ ] **Horizontal Scaling** — Load balancer
@@ -48,6 +51,8 @@
 | SQL Server ยังไม่เชื่อมต่อจริง | ⏳ รอ | sqlserver.go พร้อมแล้ว |
 | WebUI ยังไม่มี Login | 🔜 | เชื่อม Auth ทีหลัง |
 | nomic-embed-text-v2-moe context = 512 | ✅ แก้แล้ว | ChunkSize=200 |
+| LDAP TLS ยังไม่ production-ready | ⏸ Deferred | ตอนนี้ใช้ DEV_MODE และยังเข้า AD server จริงไม่ได้ จึงยังไม่แก้จนกว่าจะมี environment สำหรับทดสอบ |
+| Document Access Control ยังไม่มีนโยบาย | ⏸ Deferred | ต้องรอ policy ว่า role/department/access_level เห็นเอกสารอะไรได้บ้างก่อนลง schema และ filter จริง |
 
 ---
 

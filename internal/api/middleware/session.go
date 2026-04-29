@@ -28,6 +28,13 @@ func SessionMiddleware(sessionPort ports.SessionPort) fiber.Handler {
 			if err != nil {
 				slog.Warn("session not found, creating new", "session_id", sessionID)
 				session = nil
+			} else if session.UserID != claims.UserID {
+				slog.Warn("session owner mismatch, creating new",
+					"session_id", sessionID,
+					"session_user_id", session.UserID,
+					"claims_user_id", claims.UserID,
+				)
+				session = nil
 			}
 		}
 

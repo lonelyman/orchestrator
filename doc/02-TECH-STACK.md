@@ -18,11 +18,25 @@
 | **Architecture** | Hexagonal Architecture | Hexagonal Architecture |
 
 ## Key Design Principles
-- **Migration-Ready:** ทุก connection ผ่าน Interface → สลับ Ollama → vLLM ได้ใน `.env`
+- **Migration-Ready:** Core เรียกผ่าน `LLMPort` → เพิ่ม vLLM adapter ได้โดยไม่แตะ orchestrator logic
 - **Zero-Trust MCP:** SQL Server → Read-only + Validation Layer เสมอ
 - **Gateway-Ready:** รองรับ Header `X-User-ID`, `X-Session-ID`
 - **Standard Response:** `{"data":{}}` หรือ `{"error":{}}` เสมอ
 - **OpenAI-Compatible:** `/v1/*` endpoints ใช้กับ WebUI ได้เลย
+
+## LLM Adapter Plan
+
+สถานะปัจจุบัน:
+- Development ใช้ Ollama adapter (`internal/infrastructure/llm/ollama.go`)
+- Production target คือ vLLM แต่ยังไม่มี vLLM/OpenAI-compatible adapter ใน codebase
+- `LLM_BACKEND` อยู่ใน config แล้ว แต่ยังไม่ได้ใช้ switch adapter จริง
+
+แนวทางที่ต้องรักษา:
+- อย่าใส่ vLLM/OpenAI schema ปนใน Ollama adapter
+- เพิ่ม adapter แยก เช่น `internal/infrastructure/llm/openai_compatible.go`
+- ให้ adapter ใหม่ implement `domain/ports.LLMPort`
+- ให้ `cmd/server` หรือ bootstrap layer เลือก adapter จาก `LLM_BACKEND`
+- HTTP hardening เช่น timeout, status handling, retry/circuit breaker ควรอยู่ที่ adapter boundary
 
 ---
 
@@ -36,14 +50,12 @@ orchestrator/
 ├── go.mod / go.sum
 ├── cmd/server/main.go                  ← Entrypoint + wire + routes
 ├── config/config.go                    ← AppConfig struct
-├── docker/init/
-│   ├── 01-extensions.sql               ← CREATE EXTENSION vector
-│   └── 02-sessions.sql                 ← sessions + messages tables
+├── internal/infrastructure/migrations/ ← Embedded goose migrations
 └── internal/
     ├── api/
     │   ├── handlers/
     │   │   ├── response.go             ← OK() / Fail() standard response
-    │   │   ├── health.go               ← GET /health (db + llm + embedder)
+    │   │   ├── health.go               ← GET /live, /ready, /health
     │   │   ├── auth.go                 ← POST /auth/login, GET /auth/me
     │   │   ├── chat.go                 ← POST /v1/chat/completions + stream
     │   │   └── rag.go                  ← POST /v1/rag/ingest + upload

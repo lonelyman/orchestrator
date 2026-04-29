@@ -19,12 +19,14 @@ import (
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/auth"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/embedder"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/llm"
+	"github.com/enterprise-ai/orchestrator/internal/infrastructure/migrations"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/session"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/vector"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/limiter"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 	pgxvector "github.com/pgvector/pgvector-go/pgx"
 )
 
@@ -36,7 +38,11 @@ func main() {
 	slog.SetDefault(logger)
 
 	// โหลด config
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("invalid config", "error", err)
+		os.Exit(1)
+	}
 	slog.Info("config loaded", "port", cfg.APIPort, "model", cfg.LLMModel, "embed", cfg.EmbedModel)
 
 	// เชื่อมต่อ PostgreSQL
@@ -61,6 +67,17 @@ func main() {
 	defer pool.Close()
 	slog.Info("postgresql connected")
 
+	sqlDB := stdlib.OpenDBFromPool(pool)
+	defer sqlDB.Close()
+
+	migrationCtx, migrationCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer migrationCancel()
+	if err := migrations.Up(migrationCtx, sqlDB); err != nil {
+		slog.Error("run migrations", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("database migrations applied")
+
 	// สร้าง Adapters
 	ollamaURL := fmt.Sprintf("http://%s:%s", cfg.LLMHost, cfg.LLMPort)
 	ollamaAdapter := llm.NewOllamaAdapter(ollamaURL, cfg.LLMModel)
@@ -74,20 +91,13 @@ func main() {
 	auditAdapter := auditInfra.NewPostgresAdapter(pool)
 	auditHandler := handlers.NewAuditHandler(auditAdapter)
 
-	// สร้าง Schema
-	if err := pgvectorAdapter.InitSchema(context.Background()); err != nil {
-		slog.Error("init schema", "error", err)
-		os.Exit(1)
-	}
-	slog.Info("pgvector schema ready")
-
 	// สร้าง Core
 	ragEngine := rag.New(nomicAdapter, pgvectorAdapter)
 	orch := orchestrator.New(ollamaAdapter, ragEngine, sessionAdapter, cfg.SystemPrompt)
 
 	// สร้าง Auth
 	ldapAdapter := auth.NewLDAPAdapter(cfg.ADServer, cfg.ADPort, cfg.ADBaseDN, cfg.ADDomain, cfg.DevMode, cfg.DevUsername, cfg.DevPassword)
-	jwtManager := auth.NewJWTManager(cfg.JWTSecret, 8*time.Hour)
+	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.JWTExpiry)
 	authHandler := handlers.NewAuthHandler(ldapAdapter, jwtManager)
 
 	// สร้าง Handlers
@@ -102,6 +112,8 @@ func main() {
 
 	// Public routes (ไม่ต้อง login)
 	app.Post("/auth/login", authHandler.Login)
+	app.Get("/live", healthHandler.Live)
+	app.Get("/ready", healthHandler.Ready)
 	app.Get("/health", healthHandler.Check)
 	app.Get("/v1/models", chatHandler.Models)
 
@@ -138,6 +150,7 @@ func main() {
 
 	// Admin routes
 	admin := app.Group("/v1/admin", middleware.JWTMiddleware(jwtManager))
+	admin.Use(middleware.RequireRole("admin"))
 	admin.Get("/logs", auditHandler.List)
 
 	// Graceful Shutdown

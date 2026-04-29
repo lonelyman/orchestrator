@@ -12,7 +12,6 @@ services:
          POSTGRES_PASSWORD: changeme
       volumes:          
          - postgres_data:/var/lib/postgresql/data
-         - ./docker/init:/docker-entrypoint-initdb.d
       ports:
          - "15433:5432"
       healthcheck:

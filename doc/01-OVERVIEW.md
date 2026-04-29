@@ -82,7 +82,9 @@ RAG        MCP       Direct
 
 | Method | Endpoint | Auth | หน้าที่ |
 |---|---|---|---|
-| GET | /health | ❌ | ตรวจสอบสถานะทุก dependency |
+| GET | /live | ❌ | Liveness: process ยังตอบ HTTP |
+| GET | /ready | ❌ | Readiness: DB + LLM + Embedder พร้อมรับ traffic |
+| GET | /health | ❌ | Backward-compatible readiness |
 | POST | /auth/login | ❌ | Login ด้วย AD account |
 | GET | /auth/me | ✅ JWT | ดูข้อมูล user |
 | GET | /v1/models | ❌ | Model list (OpenAI-compatible) |

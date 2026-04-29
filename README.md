@@ -24,7 +24,9 @@ go run cmd/server/main.go
 
 | Method | Endpoint             | หน้าที่                   |
 | ------ | -------------------- | ------------------------- |
-| GET    | /health              | ตรวจสอบสถานะ              |
+| GET    | /live                | Liveness: process ยังตอบ HTTP |
+| GET    | /ready               | Readiness: DB + LLM + Embedder พร้อม |
+| GET    | /health              | Backward-compatible readiness |
 | POST   | /v1/chat/completions | Chat (OpenAI-compatible)  |
 | POST   | /v1/rag/ingest       | อัพโหลดเอกสาร             |
 | POST   | /v1/rag/upload       | อัพโหลดไฟล์ .txt/.md/.pdf |
@@ -107,3 +109,4 @@ apk add --no-cache poppler-utils tesseract-ocr tesseract-ocr-data-tha
 - LLM Prod: vLLM + qwen2.5:32b
 - Vector DB: PostgreSQL + pgvector
 - Embedding: nomic-embed-text
+- Migrations: Embedded goose migrations at startup

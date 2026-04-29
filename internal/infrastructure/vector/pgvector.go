@@ -18,25 +18,6 @@ func NewPgvectorAdapter(pool *pgxpool.Pool) *PgvectorAdapter {
 	return &PgvectorAdapter{pool: pool}
 }
 
-func (p *PgvectorAdapter) InitSchema(ctx context.Context) error {
-	queries := []string{
-		`CREATE EXTENSION IF NOT EXISTS vector`,
-		`CREATE TABLE IF NOT EXISTS documents (
-			id         TEXT PRIMARY KEY,
-			content    TEXT NOT NULL,
-			source     TEXT NOT NULL,
-			embedding  vector(768),
-			created_at TIMESTAMPTZ DEFAULT NOW()
-		)`,
-	}
-	for _, q := range queries {
-		if _, err := p.pool.Exec(ctx, q); err != nil {
-			return fmt.Errorf("init schema: %w", err)
-		}
-	}
-	return nil
-}
-
 func (p *PgvectorAdapter) Store(ctx context.Context, doc models.Document) error {
 	query := `
 		INSERT INTO documents (id, content, source, embedding, created_at)

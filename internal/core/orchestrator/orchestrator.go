@@ -60,7 +60,7 @@ func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string
 	// Intent Classification
 	intentResult := o.classifier.Classify(lastMsg)
 	slog.Info("intent classified",
-		"query", lastMsg,
+		"query_len", len([]rune(lastMsg)),
 		"intent", intentResult.Intent,
 		"confidence", intentResult.Confidence,
 	)

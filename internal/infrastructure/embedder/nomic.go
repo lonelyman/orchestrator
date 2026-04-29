@@ -5,9 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"strings"
+	"time"
 )
+
+const maxErrorBodyBytes = 4 << 10
 
 // NomicAdapter implement EmbedderPort สำหรับ nomic-embed-text ผ่าน Ollama
 type NomicAdapter struct {
@@ -21,7 +27,7 @@ func NewNomicAdapter(baseURL string, model string) *NomicAdapter {
 	return &NomicAdapter{
 		baseURL: baseURL,
 		model:   model,
-		client:  &http.Client{},
+		client:  newHTTPClient(),
 	}
 }
 
@@ -48,7 +54,7 @@ func (n *NomicAdapter) Embed(ctx context.Context, text string) ([]float32, error
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	slog.Info("embed request", "model", n.model, "text", text, "url", n.baseURL+"/api/embeddings")
+	slog.Info("embed request", "model", n.model, "text_len", len([]rune(text)), "url", n.baseURL+"/api/embeddings")
 
 	req, err := http.NewRequestWithContext(ctx, "POST", n.baseURL+"/api/embeddings", bytes.NewBuffer(body))
 	if err != nil {
@@ -61,6 +67,10 @@ func (n *NomicAdapter) Embed(ctx context.Context, text string) ([]float32, error
 		return nil, fmt.Errorf("send request: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if err := checkStatus(resp, "embedder"); err != nil {
+		return nil, err
+	}
 
 	var embedResp ollamaEmbedResponse
 	if err := json.NewDecoder(resp.Body).Decode(&embedResp); err != nil {
@@ -79,4 +89,33 @@ func (n *NomicAdapter) Embed(ctx context.Context, text string) ([]float32, error
 // Dimensions บอกขนาด Vector ของ nomic-embed-text
 func (n *NomicAdapter) Dimensions() int {
 	return 768
+}
+
+func newHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 30 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			IdleConnTimeout:       90 * time.Second,
+		},
+	}
+}
+
+func checkStatus(resp *http.Response, operation string) error {
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
+	message := strings.TrimSpace(string(body))
+	if message == "" {
+		return fmt.Errorf("%s returned status %d", operation, resp.StatusCode)
+	}
+	return fmt.Errorf("%s returned status %d: %s", operation, resp.StatusCode, message)
 }
