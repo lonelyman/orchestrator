@@ -47,11 +47,14 @@ orchestrator/
 ├── docker-compose.yml                  ← postgres + orchestrator + webui
 ├── .env / .env.example
 ├── go.mod / go.sum
-├── cmd/server/main.go                  ← Entrypoint + wire + routes
+├── cmd/server/main.go                  ← Entrypoint + graceful shutdown
 ├── config/config.go                    ← AppConfig struct
 ├── internal/infrastructure/migrations/ ← Embedded goose migrations
 └── internal/
+    ├── app/
+    │   └── server.go                   ← DB, migrations, adapters, core wiring
     ├── api/
+    │   ├── router.go                   ← Public/protected/admin route registration
     │   ├── handlers/
     │   │   ├── response.go             ← OK() / Fail() standard response
     │   │   ├── health.go               ← GET /live, /ready, /health

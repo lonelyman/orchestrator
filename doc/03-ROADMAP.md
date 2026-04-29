@@ -36,6 +36,7 @@
 ### Priority ต่ำ (Phase 4)
 - [ ] **Monitoring** — Prometheus + Grafana (commented ใน docker-compose)
 - [x] **Goose migrations** — แทน `docker/init` และ `InitSchema()`
+- [x] **Clean bootstrap/router split** — `main.go` เล็กลง, wiring อยู่ `internal/app`, routes อยู่ `internal/api/router.go`
 - [ ] **OpenTelemetry** — Distributed Tracing
 - [ ] **OCR Worker** — แยกเป็น Background Process
 - [ ] **Horizontal Scaling** — Load balancer
