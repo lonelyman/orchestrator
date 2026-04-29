@@ -304,11 +304,11 @@ type StreamEvent struct {
 
 ### Gap F — Prompt Management แบบ scale ไม่ได้
 
-**ปัจจุบัน:** System prompt เป็น string เดียวใน config
+**ปัจจุบัน:** System prompt รองรับ file-based prompt ผ่าน `SYSTEM_PROMPT_FILE` แล้ว และยัง fallback เป็น `SYSTEM_PROMPT` ได้
 
 **ปัญหา:**
 - 5 use case ต้องการ prompt ต่างกัน (general/web/RAG/sales/exec)
-- เปลี่ยน prompt ต้อง redeploy
+- ยังไม่มี prompt registry/admin UI สำหรับสลับ prompt runtime
 - ไม่มี A/B test
 
 **ออกแบบที่ควรเป็น:**
@@ -576,8 +576,8 @@ type ModelRouter interface {
    - ยังเหลือ update/re-ingest, versioning, soft delete
 
 4. **Prompt management** (effort: S, value: M)
-   - 5 use case prompt ต่างกัน
-   - ไม่ต้อง redeploy ตอนปรับคำพูด
+   - ✅ file-based system prompt ทำแล้ว
+   - ยังเหลือ prompt registry สำหรับ use case แยก และ admin UI ภายหลัง
 
 5. **Analytics Port + SQL templates** (effort: M, value: H)
    - ปลอดภัยกว่าให้ LLM เขียน SQL ดิบ

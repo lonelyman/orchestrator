@@ -19,6 +19,7 @@ RUN apk add --no-cache poppler-utils
 WORKDIR /app
 
 COPY --from=builder /app/orchestrator .
+COPY prompts ./prompts
 
 EXPOSE 50000
 

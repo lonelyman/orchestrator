@@ -78,7 +78,8 @@ JWT_SECRET=change-this-to-random-string-in-production
 JWT_EXPIRY=8h
 
 # System Prompt
-SYSTEM_PROMPT=You are a helpful enterprise AI assistant. You must always respond in Thai language only. Never use Chinese, English, or any other language. Thai language only.
+SYSTEM_PROMPT_FILE=prompts/system_general.tmpl
+SYSTEM_PROMPT=
 ```
 
 ---

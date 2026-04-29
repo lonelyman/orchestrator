@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -46,6 +47,7 @@ var configEnvKeys = []string{
 	"JWT_SECRET",
 	"JWT_EXPIRY",
 	"SYSTEM_PROMPT",
+	"SYSTEM_PROMPT_FILE",
 }
 
 func clearConfigEnv(t *testing.T) {
@@ -221,5 +223,39 @@ func TestLoad_AcceptsProductionConfig(t *testing.T) {
 	}
 	if cfg.OCRTimeout != 240*time.Second || cfg.OCRMaxPages != 30 {
 		t.Fatalf("unexpected OCR limits: timeout=%s maxPages=%d", cfg.OCRTimeout, cfg.OCRMaxPages)
+	}
+}
+
+func TestLoad_LoadsSystemPromptFromFile(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("DEV_MODE", "true")
+
+	promptFile := t.TempDir() + "/system_prompt.tmpl"
+	if err := os.WriteFile(promptFile, []byte("ตอบเป็นภาษาไทยเท่านั้น\n"), 0o600); err != nil {
+		t.Fatalf("write prompt file: %v", err)
+	}
+	t.Setenv("SYSTEM_PROMPT_FILE", promptFile)
+	t.Setenv("SYSTEM_PROMPT", "ignored")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.SystemPrompt != "ตอบเป็นภาษาไทยเท่านั้น" {
+		t.Fatalf("unexpected system prompt: %q", cfg.SystemPrompt)
+	}
+}
+
+func TestLoad_RejectsMissingSystemPromptFile(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("DEV_MODE", "true")
+	t.Setenv("SYSTEM_PROMPT_FILE", "/tmp/missing-system-prompt.tmpl")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(err.Error(), "SYSTEM_PROMPT_FILE") {
+		t.Fatalf("expected SYSTEM_PROMPT_FILE error, got %v", err)
 	}
 }

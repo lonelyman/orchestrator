@@ -58,6 +58,12 @@ go run cmd/server/main.go
 - ต้องมี `messages` อย่างน้อย 1 รายการ และ message สุดท้ายต้องเป็น `user`
 - จำกัด 64 messages, 20,000 ตัวอักษรต่อ message, 60,000 ตัวอักษรรวม
 
+### Prompt management
+
+- ค่า default ใช้ `SYSTEM_PROMPT_FILE=prompts/system_general.tmpl`
+- ใช้ `SYSTEM_PROMPT` เป็น fallback/override เมื่อไม่ได้กำหนดไฟล์
+- Docker image copy โฟลเดอร์ `prompts/` เข้า `/app/prompts`
+
 ### Upload constraints
 
 - รองรับไฟล์: `.txt`, `.md`, `.pdf`

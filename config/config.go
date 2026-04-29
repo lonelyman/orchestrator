@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	defaultJWTSecret = "change-this-secret-in-production"
-	exampleJWTSecret = "change-this-to-random-string-in-production"
-	defaultDBPass    = "changeme"
+	defaultJWTSecret    = "change-this-secret-in-production"
+	exampleJWTSecret    = "change-this-to-random-string-in-production"
+	defaultDBPass       = "changeme"
+	defaultSystemPrompt = "You are a helpful enterprise AI assistant. You must always respond in Thai language only."
 )
 
 // AppConfig เก็บ configuration ทั้งหมดของระบบ
@@ -148,6 +149,10 @@ func Load() (*AppConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+	systemPrompt, err := loadSystemPrompt()
+	if err != nil {
+		return nil, err
+	}
 
 	cfg := &AppConfig{
 		DevMode:     devMode,
@@ -191,8 +196,7 @@ func Load() (*AppConfig, error) {
 		OCRPrompt:         getEnv("OCR_PROMPT", "Extract all readable text from this image. Preserve Thai and English text. Return only the extracted text."),
 		OCRTimeout:        ocrTimeout,
 		OCRMaxPages:       ocrMaxPages,
-		SystemPrompt: getEnv("SYSTEM_PROMPT",
-			"You are a helpful enterprise AI assistant. You must always respond in Thai language only."),
+		SystemPrompt:      systemPrompt,
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -350,6 +354,24 @@ func parseDuration(key, defaultVal string) (time.Duration, error) {
 		return 0, fmt.Errorf("invalid %s: must be greater than zero", key)
 	}
 	return parsed, nil
+}
+
+func loadSystemPrompt() (string, error) {
+	promptFile := strings.TrimSpace(os.Getenv("SYSTEM_PROMPT_FILE"))
+	if promptFile == "" {
+		return getEnv("SYSTEM_PROMPT", defaultSystemPrompt), nil
+	}
+
+	b, err := os.ReadFile(promptFile)
+	if err != nil {
+		return "", fmt.Errorf("read SYSTEM_PROMPT_FILE: %w", err)
+	}
+	prompt := strings.TrimSpace(string(b))
+	if prompt == "" {
+		return "", fmt.Errorf("SYSTEM_PROMPT_FILE must not be empty")
+	}
+
+	return prompt, nil
 }
 
 func isWeakJWTSecret(secret string) bool {
