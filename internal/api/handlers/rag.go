@@ -9,14 +9,26 @@ import (
 )
 
 type RAGHandler struct {
-	ragEngine *rag.RAGEngine
+	ragEngine ragIngestor
+}
+
+type ragIngestor interface {
+	Ingest(ctx context.Context, content, source string) error
 }
 
 func NewRAGHandler(ragEngine *rag.RAGEngine) *RAGHandler {
 	return &RAGHandler{ragEngine: ragEngine}
 }
 
+func NewRAGHandlerWithIngestor(ragEngine ragIngestor) *RAGHandler {
+	return &RAGHandler{ragEngine: ragEngine}
+}
+
 func (h *RAGHandler) Ingest(c fiber.Ctx) error {
+	if h.ragEngine == nil {
+		return Fail(c, 500, "rag engine not configured", "INGEST_ERROR")
+	}
+
 	var req struct {
 		Content string `json:"content"`
 		Source  string `json:"source"`
@@ -36,9 +48,19 @@ func (h *RAGHandler) Ingest(c fiber.Ctx) error {
 }
 
 func (h *RAGHandler) Upload(c fiber.Ctx) error {
+	if h.ragEngine == nil {
+		return Fail(c, 500, "rag engine not configured", "INGEST_ERROR")
+	}
+
 	file, err := c.FormFile("file")
 	if err != nil {
 		return Fail(c, 400, "missing file", "BAD_REQUEST")
+	}
+	if file.Size <= 0 {
+		return Fail(c, 400, "empty file", "BAD_REQUEST")
+	}
+	if file.Size > rag.MaxUploadBytes {
+		return Fail(c, 413, "file too large", "FILE_TOO_LARGE")
 	}
 
 	f, err := file.Open()
@@ -51,8 +73,14 @@ func (h *RAGHandler) Upload(c fiber.Ctx) error {
 	if err != nil {
 		return Fail(c, 400, err.Error(), "PARSE_ERROR")
 	}
+	if text == "" {
+		return Fail(c, 400, "no content extracted", "PARSE_ERROR")
+	}
 
 	chunks := rag.Chunk(text, rag.DefaultChunkOptions())
+	if len(chunks) == 0 {
+		return Fail(c, 400, "no chunks generated", "PARSE_ERROR")
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()

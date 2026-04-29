@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/enterprise-ai/orchestrator/internal/core/orchestrator"
@@ -22,6 +23,12 @@ func (h *ChatHandler) Completions(c fiber.Ctx) error {
 	var req models.ChatRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return Fail(c, 400, "invalid request", "BAD_REQUEST")
+	}
+	if len(req.Messages) == 0 {
+		return Fail(c, 400, "messages is required", "BAD_REQUEST")
+	}
+	if strings.TrimSpace(req.Messages[len(req.Messages)-1].Content) == "" {
+		return Fail(c, 400, "last message content is required", "BAD_REQUEST")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)

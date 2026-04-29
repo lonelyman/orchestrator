@@ -259,6 +259,20 @@ type EmbedderPort interface {
 - `POST /v1/chat/completions` → ตอบภาษาไทย ✅
 - Git commit: `feat: phase 0 - go orchestrator with ollama adapter` ✅
 
+#### [2026-04-29] Incident: RAG Upload PDF ได้ PARSE_ERROR บางไฟล์
+
+- อาการที่เจอ: `400 PARSE_ERROR` และข้อความ `no text extracted from PDF`
+- ไฟล์ตัวอย่างที่ใช้ทดสอบ: ประกาศภาษาไทย (PDF สแกน)
+- Root cause:
+   - เครื่องที่รันไม่มี `pdftotext` ช่วงแรก
+   - หลังติดตั้ง `pdftotext` แล้ว ยังมีบางไฟล์ที่เป็นสแกน/โครงสร้างพิเศษ ทำให้ดึงข้อความไม่ได้
+- วิธีแก้ที่ทำแล้ว:
+   - ปรับ parser ให้ fallback 3 ชั้น: `pdftotext` -> Go PDF parser -> OCR (`pdftoppm` + `tesseract -l tha+eng`)
+   - เพิ่ม upload integration test ด้วยไฟล์จริง
+- ข้อควรระวังสำหรับการย้ายไปรันเครื่องอื่น:
+   - ต้องติดตั้ง dependencies runtime ให้ครบ โดยเฉพาะ OCR tools ถ้าต้องรองรับ PDF สแกน
+   - Alpine แนะนำ `apk add --no-cache poppler-utils tesseract-ocr tesseract-ocr-data-tha`
+
 ---
 
 #### [2026-04-28] Phase 1 RAG Engine — สำเร็จ ✅

@@ -56,7 +56,7 @@ func main() {
 
 	// สร้าง Core
 	ragEngine := rag.New(nomicAdapter, pgvectorAdapter)
-	orch := orchestrator.New(ollamaAdapter, ragEngine)
+	orch := orchestrator.New(ollamaAdapter, ragEngine, cfg.SystemPrompt)
 
 	// สร้าง Handlers
 	healthHandler := handlers.NewHealthHandler(orch)

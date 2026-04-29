@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/enterprise-ai/orchestrator/internal/core/rag"
 	"github.com/enterprise-ai/orchestrator/internal/domain/models"
@@ -12,17 +13,26 @@ import (
 
 // Orchestrator คือสมองกลางของระบบ
 type Orchestrator struct {
-	llm ports.LLMPort
-	rag *rag.RAGEngine
+	llm          ports.LLMPort
+	rag          *rag.RAGEngine
+	systemPrompt string
 }
 
 // New สร้าง Orchestrator ใหม่
-func New(llm ports.LLMPort, rag *rag.RAGEngine) *Orchestrator {
-	return &Orchestrator{llm: llm, rag: rag}
+func New(llm ports.LLMPort, rag *rag.RAGEngine, systemPrompt string) *Orchestrator {
+	if strings.TrimSpace(systemPrompt) == "" {
+		systemPrompt = "You are a helpful enterprise AI assistant. You must always respond in Thai language only."
+	}
+
+	return &Orchestrator{llm: llm, rag: rag, systemPrompt: systemPrompt}
 }
 
 // Chat รับ request และส่งคำตอบกลับ
 func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string, error) {
+	if len(req.Messages) == 0 {
+		return "", fmt.Errorf("invalid request: messages is required")
+	}
+
 	// ดึงคำถามล่าสุด
 	lastMsg := req.Messages[len(req.Messages)-1].Content
 
@@ -31,7 +41,7 @@ func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string
 	log.Printf("RAG Search: query=%s, docs=%d, err=%v", lastMsg, len(docs), err)
 
 	var systemContent string
-	systemContent = "You are a helpful enterprise AI assistant. You must always respond in Thai language only."
+	systemContent = o.systemPrompt
 
 	if err == nil && len(docs) > 0 {
 		ragContext := o.rag.BuildContext(docs)
