@@ -11,8 +11,10 @@ import (
 
 	"github.com/enterprise-ai/orchestrator/config"
 	"github.com/enterprise-ai/orchestrator/internal/api/handlers"
+	"github.com/enterprise-ai/orchestrator/internal/api/middleware"
 	"github.com/enterprise-ai/orchestrator/internal/core/orchestrator"
 	"github.com/enterprise-ai/orchestrator/internal/core/rag"
+	"github.com/enterprise-ai/orchestrator/internal/infrastructure/auth"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/embedder"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/llm"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/vector"
@@ -72,6 +74,11 @@ func main() {
 	ragEngine := rag.New(nomicAdapter, pgvectorAdapter)
 	orch := orchestrator.New(ollamaAdapter, ragEngine, cfg.SystemPrompt)
 
+	// สร้าง Auth
+	ldapAdapter := auth.NewLDAPAdapter(cfg.ADServer, cfg.ADPort, cfg.ADBaseDN, cfg.ADDomain)
+	jwtManager := auth.NewJWTManager(cfg.JWTSecret, 8*time.Hour)
+	authHandler := handlers.NewAuthHandler(ldapAdapter, jwtManager)
+
 	// สร้าง Handlers
 	healthHandler := handlers.NewHealthHandler(orch, pgvectorAdapter)
 	chatHandler := handlers.NewChatHandler(orch)
@@ -81,6 +88,18 @@ func main() {
 	app := fiber.New(fiber.Config{
 		AppName: "Enterprise AI Orchestrator v0.1",
 	})
+
+	// Public routes (ไม่ต้อง login)
+	app.Post("/auth/login", authHandler.Login)
+	app.Get("/health", healthHandler.Check)
+	app.Get("/v1/models", chatHandler.Models)
+
+	// Protected routes (ต้อง login)
+	protected := app.Group("/", middleware.JWTMiddleware(jwtManager))
+	protected.Get("/auth/me", authHandler.Me)
+	protected.Post("/v1/chat/completions", chatHandler.Completions)
+	protected.Post("/v1/rag/ingest", ragHandler.Ingest)
+	protected.Post("/v1/rag/upload", ragHandler.Upload)
 
 	// Routes
 	app.Get("/health", healthHandler.Check)

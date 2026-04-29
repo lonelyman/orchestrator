@@ -1,6 +1,9 @@
 package config
 
-import "os"
+import (
+	"os"
+	"strconv"
+)
 
 // AppConfig เก็บ configuration ทั้งหมดของระบบ
 type AppConfig struct {
@@ -13,7 +16,7 @@ type AppConfig struct {
 	LLMPort    string
 	LLMModel   string
 
-	// Embedder
+	// Embedding
 	EmbedModel string
 
 	// Database
@@ -23,12 +26,24 @@ type AppConfig struct {
 	DBUser string
 	DBPass string
 
+	// Active Directory
+	ADServer string
+	ADPort   int
+	ADBaseDN string
+	ADDomain string
+
+	// JWT
+	JWTSecret string
+	JWTExpiry string
+
 	// System Prompt
 	SystemPrompt string
 }
 
 // Load โหลด config จาก environment variables
 func Load() *AppConfig {
+	adPort, _ := strconv.Atoi(getEnv("AD_PORT", "389"))
+
 	return &AppConfig{
 		APIPort:    getEnv("API_PORT", "50000"),
 		LLMBackend: getEnv("LLM_BACKEND", "ollama"),
@@ -41,8 +56,14 @@ func Load() *AppConfig {
 		DBName:     getEnv("DB_NAME", "orchestrator"),
 		DBUser:     getEnv("DB_USER", "orchestrator"),
 		DBPass:     getEnv("DB_PASS", "changeme"),
+		ADServer:   getEnv("AD_SERVER", "192.168.2.1"),
+		ADPort:     adPort,
+		ADBaseDN:   getEnv("AD_BASE_DN", "DC=nutritionprofess,DC=com"),
+		ADDomain:   getEnv("AD_DOMAIN", "nutritionprofess.com"),
+		JWTSecret:  getEnv("JWT_SECRET", "change-this-secret-in-production"),
+		JWTExpiry:  getEnv("JWT_EXPIRY", "8h"),
 		SystemPrompt: getEnv("SYSTEM_PROMPT",
-			"You are a helpful enterprise AI assistant. You must always respond in Thai language only. Never use Chinese, English, or any other language. Thai language only."),
+			"You are a helpful enterprise AI assistant. You must always respond in Thai language only."),
 	}
 }
 
