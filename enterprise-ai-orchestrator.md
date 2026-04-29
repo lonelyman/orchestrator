@@ -147,7 +147,7 @@ type EmbedderPort interface {
 |---|---|---|
 | **Phase 0** | Foundation: Ollama + Docker + Go + WebUI | ✅ Done |
 | **Phase 1** | RAG: Vector Ingestion + Search | ✅ Done |
-| **Phase 2** | MCP: SQL Server Bridge | ⏳ |
+| **Phase 2** | MCP: SQL Server Bridge | ✅ Structure Ready (SQL Server pending) |
 | **Phase 3** | Orchestration: Intent Router รวมร่าง | ⏳ |
 | **Phase 4** | Production: Ubuntu + vLLM + Blackwell | ⏳ |
 
@@ -266,13 +266,52 @@ type EmbedderPort interface {
 
 ---
 
-### 🔜 Next Steps (Phase 2 — MCP Bridge)
+#### [2026-04-29] ทดสอบบน iMac Server — สำเร็จ ✅
 
-1. **สร้าง MCPPort interface** — domain/ports/mcp.go
-2. **สร้าง SQL Server Adapter** — infrastructure/mcp/sqlserver.go
-3. **Tool Registry** — ลงทะเบียน tools ที่ AI ใช้ได้
-4. **Validation Layer** — Read-only + permission check
-5. **อัพเดต Orchestrator** — เพิ่ม MCP path
+- git pull บน iMac ✅
+- docker compose up --build ✅
+- pgvector extension auto-init ผ่าน docker/init/01-extensions.sql ✅
+- Upload PDF จาก MacBook → iMac Server ✅
+- Chat จาก Postman → iMac Server → AI ตอบจากเอกสารจริง ✅
+
+**Production-ready Flow:**
+```
+MacBook (Postman) → 10.19.105.32:50000 → Go Orchestrator → Ollama + pgvector
+```
+
+| ไฟล์ | Package | หน้าที่ |
+|---|---|---|
+| `internal/domain/models/mcp.go` | models | Tool, ToolCall, ToolResult |
+| `internal/domain/ports/mcp.go` | ports | MCPPort interface |
+| `internal/core/mcp/executor.go` | mcp | Tool Registry + Executor |
+| `internal/infrastructure/mcp/sqlserver.go` | mcp | SQLServerAdapter (Zero-Trust Read-only) |
+
+**Zero-Trust Validation:**
+- SELECT เท่านั้น ✅
+- Block: INSERT, UPDATE, DELETE, DROP, CREATE, ALTER, TRUNCATE, EXEC ✅
+- Driver: `github.com/microsoft/go-mssqldb` ✅
+- Git commit: `feat: phase 2 - MCP bridge structure` ✅
+
+#### ⚠️ Known Issue — PDF Upload (Scanned PDF)
+
+**ปัญหา:** PDF แบบ Scanned Image (ที่ Mac OCR ให้อัตโนมัติ) pdftotext ใน Docker อ่านไม่ออก
+
+**Workaround ชั่วคราว:**
+- ใช้ `/v1/rag/ingest` ส่ง text ตรงๆ แทน
+- หรือ Export PDF เป็น .txt ก่อน upload
+
+**แนวทางแก้จริง (TODO):**
+- เพิ่ม tesseract OCR ใน Dockerfile
+- รองรับภาษาไทย (tesseract-lang-tha)
+- แปลง PDF page → image → OCR → text
+
+---
+
+### 🔜 Next Steps (Phase 3 — Intent Router)
+
+1. **Intent Classifier** — ตัดสินใจว่าจะใช้ RAG / MCP / Direct
+2. **อัพเดต Orchestrator** — รวม RAG + MCP เข้าด้วยกัน
+3. **ทดสอบ** — AI ตัดสินใจเองว่าจะใช้ path ไหน
 
 ---
 

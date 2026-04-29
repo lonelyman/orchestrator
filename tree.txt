@@ -1,21 +1,31 @@
 .
+├── Dockerfile
+├── README.md
 ├── cmd
 │   └── server
 │       └── main.go
 ├── config
 │   └── config.go
-├── docker
-│   └── docker-compose.yml
+├── docker-compose.yml
 ├── enterprise-ai-orchestrator.md
 ├── go.mod
 ├── go.sum
 ├── internal
+│   ├── api
+│   │   └── handlers
+│   │       ├── chat.go
+│   │       ├── health.go
+│   │       ├── rag.go
+│   │       ├── rag_upload_test.go
+│   │       └── response.go
 │   ├── core
 │   │   ├── mcp
 │   │   │   └── executor.go
 │   │   ├── orchestrator
 │   │   │   └── orchestrator.go
 │   │   └── rag
+│   │       ├── chunker.go
+│   │       ├── parser.go
 │   │       └── rag.go
 │   ├── domain
 │   │   ├── models
@@ -38,4 +48,4 @@
 │           └── pgvector.go
 └── tree.txt
 
-18 directories, 21 files
+19 directories, 30 files
