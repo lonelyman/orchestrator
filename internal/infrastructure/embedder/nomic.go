@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 )
 
@@ -16,10 +17,10 @@ type NomicAdapter struct {
 }
 
 // NewNomicAdapter สร้าง NomicAdapter ใหม่
-func NewNomicAdapter(baseURL string) *NomicAdapter {
+func NewNomicAdapter(baseURL string, model string) *NomicAdapter {
 	return &NomicAdapter{
 		baseURL: baseURL,
-		model:   "nomic-embed-text",
+		model:   model,
 		client:  &http.Client{},
 	}
 }
@@ -47,6 +48,8 @@ func (n *NomicAdapter) Embed(ctx context.Context, text string) ([]float32, error
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
+	log.Printf("Embed request: model=%s, text=%s, url=%s", n.model, text, n.baseURL+"/api/embeddings")
+
 	req, err := http.NewRequestWithContext(ctx, "POST", n.baseURL+"/api/embeddings", bytes.NewBuffer(body))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
@@ -63,6 +66,8 @@ func (n *NomicAdapter) Embed(ctx context.Context, text string) ([]float32, error
 	if err := json.NewDecoder(resp.Body).Decode(&embedResp); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
+
+	log.Printf("Embed response: embedding_len=%d", len(embedResp.Embedding))
 
 	if len(embedResp.Embedding) == 0 {
 		return nil, fmt.Errorf("empty embedding returned")

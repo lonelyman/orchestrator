@@ -45,7 +45,7 @@ func main() {
 	// สร้าง Adapters
 	ollamaURL := fmt.Sprintf("http://%s:%s", cfg.LLMHost, cfg.LLMPort)
 	ollamaAdapter := llm.NewOllamaAdapter(ollamaURL, cfg.LLMModel)
-	nomicAdapter := embedder.NewNomicAdapter(ollamaURL)
+	nomicAdapter := embedder.NewNomicAdapter(ollamaURL, cfg.EmbedModel)
 	pgvectorAdapter := vector.NewPgvectorAdapter(pool)
 
 	// สร้าง Schema

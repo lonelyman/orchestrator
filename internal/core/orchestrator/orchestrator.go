@@ -139,6 +139,12 @@ func (o *Orchestrator) HealthCheck(ctx context.Context) error {
 
 // EmbedderCheck ตรวจสอบว่า Embedder พร้อมใช้งาน
 func (o *Orchestrator) EmbedderCheck(ctx context.Context) error {
-	_, err := o.rag.Embedder().Embed(ctx, "test")
-	return err
+	result, err := o.rag.Embedder().Embed(ctx, "health check")
+	if err != nil {
+		return err
+	}
+	if len(result) == 0 {
+		return fmt.Errorf("empty embedding returned")
+	}
+	return nil
 }
