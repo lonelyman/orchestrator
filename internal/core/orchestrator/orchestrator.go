@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/enterprise-ai/orchestrator/internal/core/intent"
 	"github.com/enterprise-ai/orchestrator/internal/core/rag"
 	"github.com/enterprise-ai/orchestrator/internal/domain/models"
 	"github.com/enterprise-ai/orchestrator/internal/domain/ports"
@@ -15,6 +16,7 @@ import (
 type Orchestrator struct {
 	llm          ports.LLMPort
 	rag          *rag.RAGEngine
+	classifier   *intent.Classifier
 	systemPrompt string
 }
 
@@ -24,7 +26,12 @@ func New(llm ports.LLMPort, rag *rag.RAGEngine, systemPrompt string) *Orchestrat
 		systemPrompt = "You are a helpful enterprise AI assistant. You must always respond in Thai language only."
 	}
 
-	return &Orchestrator{llm: llm, rag: rag, systemPrompt: systemPrompt}
+	return &Orchestrator{
+		llm:          llm,
+		rag:          rag,
+		classifier:   intent.New(),
+		systemPrompt: systemPrompt,
+	}
 }
 
 // Chat รับ request และส่งคำตอบกลับ
@@ -36,19 +43,33 @@ func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string
 	// ดึงคำถามล่าสุด
 	lastMsg := req.Messages[len(req.Messages)-1].Content
 
-	// ค้นหา context จาก RAG
-	docs, err := o.rag.Search(ctx, lastMsg, 3)
-	log.Printf("RAG Search: query=%s, docs=%d, err=%v", lastMsg, len(docs), err)
+	// Phase 3: Intent Classification
+	intentResult := o.classifier.Classify(lastMsg)
+	log.Printf("Intent: query=%s, intent=%s, confidence=%.2f, reason=%s",
+		lastMsg, intentResult.Intent, intentResult.Confidence, intentResult.Reason)
 
-	var systemContent string
-	systemContent = o.systemPrompt
+	systemContent := o.systemPrompt
 
-	if err == nil && len(docs) > 0 {
-		ragContext := o.rag.BuildContext(docs)
-		systemContent = systemContent + "\n\nUse the following information to answer the question:\n\n" + ragContext
+	switch intentResult.Intent {
+	case models.IntentRAG:
+		// ค้นหาจาก Vector DB
+		docs, err := o.rag.Search(ctx, lastMsg, 3)
+		log.Printf("RAG Search: docs=%d, err=%v", len(docs), err)
+		if err == nil && len(docs) > 0 {
+			ragContext := o.rag.BuildContext(docs)
+			systemContent = systemContent + "\n\nUse the following information to answer the question:\n\n" + ragContext
+		}
+
+	case models.IntentMCP:
+		// TODO: Phase 2 MCP — เมื่อมี SQL Server จริง
+		log.Printf("MCP Intent detected — MCP not connected yet, falling back to Direct")
+
+	case models.IntentDirect:
+		// ตอบตรงๆ ไม่ต้องค้นหาอะไร
+		log.Printf("Direct Intent — answering without RAG/MCP")
 	}
 
-	// รวม system prompt + RAG context + messages
+	// รวม system prompt + messages
 	messages := append([]models.ChatMessage{
 		{Role: "system", Content: systemContent},
 	}, req.Messages...)
