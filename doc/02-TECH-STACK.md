@@ -49,7 +49,7 @@ orchestrator/
 ├── go.mod / go.sum
 ├── cmd/server/main.go                  ← Entrypoint + graceful shutdown
 ├── config/config.go                    ← AppConfig struct
-├── internal/infrastructure/migrations/ ← Embedded goose migrations
+├── internal/infrastructure/migrations/ ← Embedded goose baseline migration
 └── internal/
     ├── app/
     │   └── server.go                   ← DB, migrations, adapters, core wiring

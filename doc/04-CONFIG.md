@@ -105,6 +105,11 @@ docker compose down && docker volume rm orchestrator_postgres_data
 docker ps
 ```
 
+หมายเหตุ migration:
+- ตอนนี้ฐานข้อมูล development ยังว่างและยังไม่ได้ใช้เป็น production data
+- migration จึงถูกจัดเป็น baseline เดียวที่ `internal/infrastructure/migrations/sql/00001_baseline.sql`
+- หลังมี production data แล้ว ห้ามแก้ migration ที่รันไปแล้ว ให้เพิ่มไฟล์ migration ใหม่เท่านั้น
+
 ---
 
 ## AD Configuration

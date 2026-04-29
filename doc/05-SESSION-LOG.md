@@ -103,7 +103,7 @@
 **Files สร้างใหม่:**
 | ไฟล์ | หน้าที่ |
 |---|---|
-| `internal/infrastructure/migrations/sql/00003_audit.sql` | audit_logs table + indexes |
+| `internal/infrastructure/migrations/sql/00001_baseline.sql` | baseline schema รวม audit_logs + indexes |
 | `internal/domain/models/audit.go` | AuditLog, AuditLogFilter |
 | `internal/domain/ports/audit.go` | AuditPort interface |
 | `internal/infrastructure/audit/postgres.go` | PostgreSQL adapter |

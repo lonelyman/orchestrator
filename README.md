@@ -117,4 +117,4 @@ apk add --no-cache poppler-utils tesseract-ocr tesseract-ocr-data-tha
 - LLM Prod: vLLM + qwen2.5:32b
 - Vector DB: PostgreSQL + pgvector
 - Embedding: nomic-embed-text
-- Migrations: Embedded goose migrations at startup
+- Migrations: Embedded goose baseline migration at startup
