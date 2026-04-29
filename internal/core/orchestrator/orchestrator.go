@@ -40,8 +40,20 @@ func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string
 		return "", fmt.Errorf("invalid request: messages is required")
 	}
 
-	// ดึงคำถามล่าสุด
+	// ดึงคำถามล่าสุด — กรอง WebUI format ออก
 	lastMsg := req.Messages[len(req.Messages)-1].Content
+
+	// ถ้า WebUI ส่งมาเป็น chat_history format ให้ดึงคำถามล่าสุดออก
+	if strings.Contains(lastMsg, "<chat_history>") {
+		lines := strings.Split(lastMsg, "\n")
+		for i := len(lines) - 1; i >= 0; i-- {
+			line := strings.TrimSpace(lines[i])
+			if strings.HasPrefix(line, "USER:") {
+				lastMsg = strings.TrimSpace(strings.TrimPrefix(line, "USER:"))
+				break
+			}
+		}
+	}
 
 	// Phase 3: Intent Classification
 	intentResult := o.classifier.Classify(lastMsg)
@@ -84,7 +96,40 @@ func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string
 
 // ChatStream รับ request และ stream คำตอบกลับทีละ chunk
 func (o *Orchestrator) ChatStream(ctx context.Context, req models.ChatRequest, onChunk func(string)) error {
-	return o.llm.ChatStream(ctx, req.Messages, onChunk)
+	log.Printf("ChatStream called: messages=%d", len(req.Messages))
+
+	if len(req.Messages) == 0 {
+		return fmt.Errorf("messages is required")
+	}
+
+	// ดึงคำถามล่าสุด
+	lastMsg := req.Messages[len(req.Messages)-1].Content
+
+	// Intent Classification
+	intentResult := o.classifier.Classify(lastMsg)
+	log.Printf("ChatStream Intent: intent=%s", intentResult.Intent)
+
+	systemContent := o.systemPrompt
+
+	// RAG Search เหมือน Chat
+	if intentResult.Intent == models.IntentRAG {
+		docs, err := o.rag.Search(ctx, lastMsg, 3)
+		if err == nil && len(docs) > 0 {
+			ragContext := o.rag.BuildContext(docs)
+			systemContent = systemContent + "\n\nUse the following information to answer the question:\n\n" + ragContext
+		}
+	}
+
+	messages := append([]models.ChatMessage{
+		{Role: "system", Content: systemContent},
+	}, req.Messages...)
+
+	err := o.llm.ChatStream(ctx, messages, func(chunk string) {
+		log.Printf("Chunk received: %q", chunk)
+		onChunk(chunk)
+	})
+	log.Printf("ChatStream done: err=%v", err)
+	return err
 }
 
 // HealthCheck ตรวจสอบว่าระบบพร้อมใช้งาน

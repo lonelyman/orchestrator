@@ -70,6 +70,7 @@ func main() {
 
 	// Routes
 	app.Get("/health", healthHandler.Check)
+	app.Get("/v1/models", chatHandler.Models)
 	app.Post("/v1/chat/completions", chatHandler.Completions)
 	app.Post("/v1/rag/ingest", ragHandler.Ingest)
 	app.Post("/v1/rag/upload", ragHandler.Upload)

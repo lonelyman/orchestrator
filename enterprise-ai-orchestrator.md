@@ -1,7 +1,8 @@
 # Enterprise AI Orchestrator — Living Document
-> **Last Updated:** 2026-04-28
-> **Status:** Phase 0 — Foundation (In Progress)
+> **Last Updated:** 2026-04-29
+> **Status:** Phase 3 Done — เตรียม Phase 4 Production
 > **วิธีใช้:** ทุกครั้งที่เปิด session ใหม่ ให้ paste document นี้ให้ Claude ดูก่อน แล้วจะ update ต่อได้เลย
+> **GitHub:** https://github.com/lonelyman/orchestrator.git (branch: dev)
 
 ---
 
@@ -15,11 +16,11 @@
 
 | Role | Machine | Spec |
 |---|---|---|
-| **Development / PoC Server** | iMac | Apple M1, 16GB RAM |
-| **Client** | MacBook Pro | sysadmins-MacBook-Pro-2 |
+| **PoC Server** | iMac | Apple M1, 16GB RAM |
+| **Dev Client** | MacBook Pro | sysadmins-MacBook-Pro-2 |
 | **Production (อนาคต)** | Ubuntu Server | NVIDIA Blackwell |
 
-**การเข้าถึง Server:**
+**การเข้าถึง iMac Server:**
 ```bash
 ssh imac_testai@10.19.105.32
 ```
@@ -29,115 +30,139 @@ ssh imac_testai@10.19.105.32
 ## 3. Architecture
 
 ```
-MacBook (Client)
-    │ SSH
+MacBook (Dev/Client)
+    │ SSH / Postman / curl
     ▼
-iMac M1 16GB (Server)
+iMac M1 16GB (PoC Server)
     │
-    ├── Ollama (Native on M1 Metal)
-    │       └── qwen2.5:7b        ← LLM หลัก (4.7GB)
+    ├── Ollama (Native M1 Metal)
+    │       ├── qwen2.5:7b        ← LLM หลัก (4.7GB)
     │       └── nomic-embed-text  ← Embedding (274MB)
     │
-    └── Docker
-            ├── Go Orchestrator (Port 50000)  ← สมองกลาง
-            ├── PostgreSQL + pgvector (Port 5432)
-            └── Open WebUI (Port 53000)
+    └── Docker Compose
+            ├── Go Orchestrator (Port 50000)
+            ├── PostgreSQL + pgvector (Port 15433)
+            └── Open WebUI (Port 53000) ← ปิดอยู่ชั่วคราว
+```
+
+### Request Flow
+
+```
+User → Postman / curl
+    ↓
+Go Orchestrator (Port 50000)
+    ↓
+Intent Classifier
+    ↓
+┌──────────┬──────────┬──────────┐
+↓          ↓          ↓
+RAG        MCP       Direct
+(pgvector) (SQL Svr)  (ตรงๆ)
+└──────────┴──────────┴──────────┘
+                ↓
+         Ollama (qwen2.5:7b)
+                ↓
+           คำตอบภาษาไทย
 ```
 
 ### Port Map
 
 | Service | Port | หมายเหตุ |
 |---|---|---|
-| Ollama | 11434 (internal) / 51434 (external) | Native on M1 |
-| Open WebUI | 53000 | Chat Interface |
+| Ollama | 11434 (internal) | Native on M1 |
 | Go Orchestrator | 50000 | Backend API |
-| PostgreSQL | 5432 | Vector DB |
+| PostgreSQL | 15433 (external) / 5432 (internal) | Vector DB |
+| Open WebUI | 53000 | ปิดอยู่ชั่วคราว |
 
-### API Design
-- **Standard:** OpenAI-compatible (`/v1/chat/completions`)
-- **Gateway-ready:** รองรับ Header `X-User-ID`, `X-Session-ID` ตั้งแต่แรก
-- **Migration-ready:** ทุก LLM connection ผ่าน Interface → สลับ Ollama → vLLM ได้ใน `.env`
+### API Endpoints
+
+| Method | Endpoint | หน้าที่ |
+|---|---|---|
+| GET | /health | ตรวจสอบสถานะ |
+| POST | /v1/chat/completions | Chat (OpenAI-compatible) |
+| POST | /v1/rag/ingest | อัพโหลด text ตรงๆ |
+| POST | /v1/rag/upload | อัพโหลดไฟล์ (PDF/TXT/MD) |
 
 ---
 
-## 4. Tech Stack Decisions
+## 4. Tech Stack
 
 | ด้าน | PoC | Production |
 |---|---|---|
-| **Language** | Go (Golang) | Go (Golang) |
+| **Language** | Go 1.26 | Go 1.26 |
 | **Framework** | Fiber v3 | Fiber v3 |
 | **LLM Engine** | Ollama (Native M1) | vLLM (Docker, Ubuntu) |
 | **Primary Model** | qwen2.5:7b | qwen2.5:32B MoE |
 | **Embedding** | nomic-embed-text | nomic / OpenAI (สลับได้) |
 | **Vector DB** | pgvector (PostgreSQL 16) | pgvector (PostgreSQL 16) |
 | **Architecture** | Hexagonal Architecture | Hexagonal Architecture |
-| **Session** | Isolated per user | Shared Knowledge Base |
+| **Session** | Isolated per user | Shared Knowledge Base (อนาคต) |
 
 ### Key Design Principles
-- **Migration-Ready:** ทุก connection ผ่าน Interface
+- **Migration-Ready:** ทุก connection ผ่าน Interface → สลับ Ollama → vLLM ได้ใน `.env`
 - **Zero-Trust MCP:** SQL Server → Read-only + Validation Layer เสมอ
-- **Gateway-Ready:** ออกแบบรองรับ API Gateway (Kong/Traefik) ตั้งแต่แรก
+- **Gateway-Ready:** รองรับ Header `X-User-ID`, `X-Session-ID` ตั้งแต่แรก
+- **Standard Response:** `{"data":{}}` หรือ `{"error":{}}` เสมอ
 - **Prompt Language:** English System Prompt / Thai Response
 
 ---
 
-## 5. Codebase Structure (Hexagonal Architecture)
+## 5. Codebase Structure
 
 ```
-enterprise-ai-orchestrator/
-│
-├── cmd/server/              ← main.go (Entrypoint)
-│
-├── internal/
-│   ├── domain/              ← Core Business Logic (ไม่รู้จัก Fiber/Postgres)
-│   │   ├── models/          ← ChatMessage, Document, Intent, Session
-│   │   └── ports/           ← Interfaces: LLMPort, EmbedPort, VectorPort, MCPPort
-│   │
-│   ├── core/                ← Use Cases
-│   │   ├── orchestrator/    ← Intent Router + Response Builder
-│   │   ├── rag/             ← Ingest + Search Logic
-│   │   └── mcp/             ← Tool Executor
-│   │
-│   └── infrastructure/      ← Adapters (implements ports)
-│       ├── llm/             ← OllamaAdapter, vLLMAdapter, CloudAdapter
-│       ├── embedder/        ← NomicAdapter, OpenAIEmbedAdapter
-│       └── vector/          ← PgvectorAdapter
-│
-├── config/                  ← .env loader, AppConfig struct
-└── docker/                  ← docker-compose files
-```
-
-### Core Interfaces
-
-```go
-// ports/llm.go
-type LLMPort interface {
-    Chat(ctx, messages, opts) (string, error)
-    ChatStream(ctx, messages, opts, onChunk func(string)) error
-    HealthCheck(ctx) error
-}
-
-// ports/embedder.go
-type EmbedderPort interface {
-    Embed(ctx, text string) ([]float32, error)
-    Dimensions() int
-}
+orchestrator/
+├── Dockerfile
+├── docker-compose.yml
+├── .env.example
+├── .gitignore
+├── README.md
+├── go.mod / go.sum
+├── cmd/server/main.go
+├── config/config.go
+├── docker/init/01-extensions.sql
+└── internal/
+    ├── api/handlers/
+    │   ├── response.go
+    │   ├── health.go
+    │   ├── chat.go
+    │   └── rag.go
+    ├── domain/
+    │   ├── models/
+    │   │   ├── chat.go
+    │   │   ├── document.go
+    │   │   ├── mcp.go
+    │   │   └── intent.go
+    │   └── ports/
+    │       ├── llm.go
+    │       ├── embedder.go
+    │       ├── vector.go
+    │       └── mcp.go
+    ├── core/
+    │   ├── intent/classifier.go
+    │   ├── orchestrator/orchestrator.go
+    │   ├── rag/
+    │   │   ├── rag.go
+    │   │   ├── chunker.go
+    │   │   └── parser.go
+    │   └── mcp/executor.go
+    └── infrastructure/
+        ├── llm/ollama.go
+        ├── embedder/nomic.go
+        ├── vector/pgvector.go
+        └── mcp/sqlserver.go
 ```
 
 ---
 
 ## 6. Intent Router
 
-| Phase | วิธี | สถานะ |
+| Intent | Trigger Keywords | Action |
 |---|---|---|
-| Phase 0-1 | Rule-based (keyword scan) | 🔜 Next |
-| Phase 3 | LLM-based classifier | ⏳ อนาคต |
+| `rag` | นโยบาย, ประกาศ, เอกสาร, OT, ล่วงเวลา, ลา ฯลฯ | ค้นหาจาก pgvector |
+| `mcp` | ยอดขาย, สต็อก, รายงาน, เงินเดือน ฯลฯ | Query SQL Server |
+| `direct` | ไม่เจอ keyword | ตอบตรงๆ |
 
-### Intent Types
-- `direct` → LLM ตอบตรงๆ
-- `rag` → ดึง context จาก pgvector ก่อน
-- `mcp` → Query SQL Server ผ่าน MCP Bridge
-- `cloud` → Escalate ไป Groq/OpenAI
+**TODO Phase 3.5:** LLM-based classifier (แม่นยำกว่า rule-based)
 
 ---
 
@@ -146,218 +171,346 @@ type EmbedderPort interface {
 | Phase | หัวข้อ | สถานะ |
 |---|---|---|
 | **Phase 0** | Foundation: Ollama + Docker + Go + WebUI | ✅ Done |
-| **Phase 1** | RAG: Vector Ingestion + Search | ✅ Done |
-| **Phase 2** | MCP: SQL Server Bridge | ✅ Structure Ready (SQL Server pending) |
-| **Phase 3** | Orchestration: Intent Router รวมร่าง | ⏳ |
+| **Phase 1** | RAG: Vector Ingestion + Search + PDF Upload | ✅ Done |
+| **Phase 2** | MCP: SQL Server Bridge Structure | ✅ Structure Ready |
+| **Phase 3** | Orchestration: Intent Router | ✅ Done |
+| **Phase 3.5** | Session Management + Auth + WebUI integration | 🔜 Next |
 | **Phase 4** | Production: Ubuntu + vLLM + Blackwell | ⏳ |
 
 ---
 
-## 8. Installation Log
+## 8. Known Issues & TODO
 
-### ✅ Completed
-
-#### [2026-04-28] SSH Setup
-- เปิด Remote Login บน iMac
-- เชื่อมต่อ MacBook → iMac สำเร็จ
-- Command: `ssh imac_testai@10.19.105.32`
-
-#### [2026-04-28] Ollama Installation
-- ติดตั้งผ่าน Homebrew: `brew install ollama`
-- Version: `0.21.2_1`
-- รันเป็น Background Service: `brew services start ollama`
-
-#### [2026-04-28] Ollama Optimization
-- เปิด Flash Attention: `OLLAMA_FLASH_ATTENTION=1`
-  - ผล: เร็วขึ้น ~20%, คำนวณ Attention เป็น block แทน token
-- เปิด KV Cache Quantization: `OLLAMA_KV_CACHE_TYPE=q8_0`
-  - ผล: ประหยัด RAM ~30%, แทบไม่เสีย quality
-
-#### [2026-04-28] Model Pull
-- `qwen2.5:7b` — 4.7GB ✅
-- `nomic-embed-text` — 274MB ✅
-
-#### [2026-04-28] Model Test
-- Thai language: ✅ ตอบภาษาไทยได้
-- Speed: ✅ ผ่านการ optimize แล้ว
-- M1 Metal: ✅ ทำงานได้จริง
-
----
-
-#### [2026-04-28] Docker Desktop
-- ติดตั้ง Docker Desktop version 29.4.1 ✅
-- ทดสอบด้วย hello-world (arm64v8) ✅
-
-#### [2026-04-28] docker-compose — PostgreSQL + Open WebUI
-- ไฟล์: ~/orchestrator/docker/docker-compose.yml
-- PostgreSQL 16 + pgvector: port 5432 ✅
-- Open WebUI: port 53000 ✅
-- เชื่อมต่อ Ollama ผ่าน host.docker.internal:11434 ✅
-
-#### [2026-04-28] WebUI Configuration
-- ตั้ง Default System Prompt: English instruction / Thai response ✅
-- Disable nomic-embed-text และ qwen:latest ออกจาก model list ✅
-- Enable เฉพาะ qwen2.5:7b ✅
-
-#### [2026-04-28] Phase 0 ทดสอบสำเร็จ
-- Chat ภาษาไทยผ่าน WebUI → Ollama ✅
-- M1 Metal GPU 100% ✅
-- System Prompt บังคับภาษาไทยได้ ✅
-
----
-
-#### [2026-04-28] Go Installation
-- Go 1.26.2 darwin/arm64 ✅
-- go mod init: `github.com/enterprise-ai/orchestrator` ✅
-
-#### [2026-04-28] VS Code Remote SSH
-- Extension: Remote - SSH ✅
-- เชื่อมต่อ MacBook → iMac โดยตรง ✅
-- เปิด folder: `/Users/imac_testai/orchestrator` ✅
-
-#### [2026-04-28] Git Setup
-- git init + push ขึ้น GitHub ✅
-- Branch: main (protected), dev (ทำงาน) ✅
-- Remote: https://github.com/lonelyman/orchestrator.git ✅
-
-#### [2026-04-28] Go Files Created (Phase 0)
-
-| ไฟล์ | Package | หน้าที่ |
+| Issue | Status | แนวทางแก้ |
 |---|---|---|
-| `internal/domain/models/chat.go` | models | ChatMessage, ChatRequest, ChatResponse, Session |
-| `internal/domain/ports/llm.go` | ports | LLMPort interface |
-| `internal/infrastructure/llm/ollama.go` | llm | OllamaAdapter (implements LLMPort) |
-| `internal/core/orchestrator/orchestrator.go` | orchestrator | สมองกลาง รับ request ส่งต่อ LLM |
-
-#### [2026-04-28] Go Orchestrator Phase 0 — สำเร็จ ✅
-
-| ไฟล์ | Package | หน้าที่ |
-|---|---|---|
-| `config/config.go` | config | โหลด env variables |
-| `cmd/server/main.go` | main | Fiber v3 HTTP Server |
-
-**ทดสอบผ่านทั้งหมด:**
-- `GET /health` → `{"status":"healthy"}` ✅
-- `POST /v1/chat/completions` → ตอบภาษาไทย ✅
-- Git commit: `feat: phase 0 - go orchestrator with ollama adapter` ✅
-
----
-
-#### [2026-04-28] Phase 1 RAG Engine — สำเร็จ ✅
-
-| ไฟล์ | Package | หน้าที่ |
-|---|---|---|
-| `internal/domain/ports/embedder.go` | ports | EmbedderPort interface |
-| `internal/domain/ports/vector.go` | ports | VectorPort interface |
-| `internal/domain/models/document.go` | models | Document, SearchResult |
-| `internal/infrastructure/embedder/nomic.go` | embedder | NomicAdapter (nomic-embed-text) |
-| `internal/infrastructure/vector/pgvector.go` | vector | PgvectorAdapter + fallback logic |
-| `internal/core/rag/rag.go` | rag | Ingest + Search + BuildContext |
-
-**Key Fix — pgvector Search:**
-- ปัญหา: similarity search ได้ 0 แถวทั้งที่มีข้อมูลใน DB
-- แก้ด้วย: parameterized query + fallback ดึงเอกสารล่าสุดเมื่อ similarity = 0
-
-**ทดสอบผ่านทั้งหมด:**
-- `POST /v1/rag/ingest` → บันทึกเอกสารลง pgvector ✅
-- `POST /v1/chat/completions` → AI ตอบโดยอ้างอิงเอกสารจริง ✅
-- RAG context อ้าง source: HR-Policy-2024.pdf ✅
-- Git commit: `feat: phase 1 - RAG engine with pgvector` ✅
-
----
-
-#### [2026-04-29] ทดสอบบน iMac Server — สำเร็จ ✅
-
-- git pull บน iMac ✅
-- docker compose up --build ✅
-- pgvector extension auto-init ผ่าน docker/init/01-extensions.sql ✅
-- Upload PDF จาก MacBook → iMac Server ✅
-- Chat จาก Postman → iMac Server → AI ตอบจากเอกสารจริง ✅
-
-**Production-ready Flow:**
-```
-MacBook (Postman) → 10.19.105.32:50000 → Go Orchestrator → Ollama + pgvector
-```
-
-| ไฟล์ | Package | หน้าที่ |
-|---|---|---|
-| `internal/domain/models/mcp.go` | models | Tool, ToolCall, ToolResult |
-| `internal/domain/ports/mcp.go` | ports | MCPPort interface |
-| `internal/core/mcp/executor.go` | mcp | Tool Registry + Executor |
-| `internal/infrastructure/mcp/sqlserver.go` | mcp | SQLServerAdapter (Zero-Trust Read-only) |
-
-**Zero-Trust Validation:**
-- SELECT เท่านั้น ✅
-- Block: INSERT, UPDATE, DELETE, DROP, CREATE, ALTER, TRUNCATE, EXEC ✅
-- Driver: `github.com/microsoft/go-mssqldb` ✅
-- Git commit: `feat: phase 2 - MCP bridge structure` ✅
-
-#### ⚠️ Known Issue — PDF Upload (Scanned PDF)
-
-**ปัญหา:** PDF แบบ Scanned Image (ที่ Mac OCR ให้อัตโนมัติ) pdftotext ใน Docker อ่านไม่ออก
-
-**Workaround ชั่วคราว:**
-- ใช้ `/v1/rag/ingest` ส่ง text ตรงๆ แทน
-- หรือ Export PDF เป็น .txt ก่อน upload
-
-**แนวทางแก้จริง (TODO):**
-- เพิ่ม tesseract OCR ใน Dockerfile
-- รองรับภาษาไทย (tesseract-lang-tha)
-- แปลง PDF page → image → OCR → text
-
----
-
-### 🔜 Next Steps (Phase 3 — Intent Router)
-
-1. **Intent Classifier** — ตัดสินใจว่าจะใช้ RAG / MCP / Direct
-2. **อัพเดต Orchestrator** — รวม RAG + MCP เข้าด้วยกัน
-3. **ทดสอบ** — AI ตัดสินใจเองว่าจะใช้ path ไหน
+| Scanned PDF อ่านไม่ออก | ✅ แก้แล้ว | tesseract OCR ใน Dockerfile |
+| pgvector Search ได้ 0 docs | ✅ แก้แล้ว | fallback query ใน pgvector.go |
+| SQL Server ยังไม่ได้เชื่อมต่อจริง | ⏳ รอ SQL Server | sqlserver.go พร้อมแล้ว |
+| Session Management ยังไม่มี | 🔜 Phase 3.5 | ต้องสร้าง session store |
+| Open WebUI ยังไม่ผ่าน Orchestrator | 🔜 Phase 3.5 | เปลี่ยน WebUI endpoint |
+| Authentication ยังไม่มี | 🔜 Phase 3.5 | JWT หรือ API Key |
 
 ---
 
 ## 9. Configuration
 
-### Ollama Service
+### Ollama (Native on iMac)
 ```
-Location: Native on iMac M1
-Service:  brew services (homebrew.mxcl.ollama)
-Env:      OLLAMA_FLASH_ATTENTION=1
-          OLLAMA_KV_CACHE_TYPE=q8_0
-Internal Port: 11434
+Service: brew services start ollama
+Env:     OLLAMA_FLASH_ATTENTION=1
+         OLLAMA_KV_CACHE_TYPE=q8_0
+Port:    11434
 ```
 
-### .env Template (จะสร้างเมื่อเริ่ม Go)
+### .env
 ```env
-# LLM Backend
+API_PORT=50000
 LLM_BACKEND=ollama
 LLM_HOST=host.docker.internal
 LLM_PORT=11434
 LLM_MODEL=qwen2.5:7b
-
-# Embedding
-EMBED_BACKEND=ollama
-EMBED_MODEL=nomic-embed-text
-
-# Database
-DB_HOST=postgres
+DB_HOST=orchestrator-postgres
 DB_PORT=5432
 DB_NAME=orchestrator
 DB_USER=orchestrator
 DB_PASS=changeme
+SYSTEM_PROMPT=You are a helpful enterprise AI assistant. You must always respond in Thai language only.
+```
 
-# Server
-API_PORT=50000
+### Docker Commands
+```bash
+docker compose up --build -d postgres orchestrator
+docker logs orchestrator-api --tail 20
+docker compose down
 ```
 
 ---
 
-## 10. Notes & Decisions
+## 10. Decisions Log
 
 | วันที่ | การตัดสินใจ | เหตุผล |
 |---|---|---|
-| 2026-04-28 | ใช้ Ollama Native (ไม่ใช่ Docker) | รีด M1 Metal GPU ได้เต็มที่ |
-| 2026-04-28 | qwen2.5:7b สำหรับ PoC | Sweet spot: ไว + คุณภาพดี บน 16GB |
-| 2026-04-28 | nomic-embed-text | เบา เร็ว รองรับ Matryoshka Embeddings |
-| 2026-04-28 | English Prompt / Thai Response | AI เข้าใจ logic ดีกว่า, ทีมใช้งานง่ายกว่า |
-| 2026-04-28 | Hexagonal Architecture | สลับ Ollama → vLLM ได้โดยไม่ rewrite |
-| 2026-04-28 | Gateway-ready Headers | รองรับ Kong/Traefik ในอนาคตโดยไม่ต้องแก้ code |
+| 2026-04-28 | Ollama Native | รีด M1 Metal GPU ได้เต็มที่ |
+| 2026-04-28 | qwen2.5:7b | Sweet spot บน 16GB |
+| 2026-04-28 | nomic-embed-text | เบา เร็ว Matryoshka Embeddings |
+| 2026-04-28 | Hexagonal Architecture | สลับ Ollama → vLLM โดยไม่ rewrite |
+| 2026-04-29 | Standard Response Format | มาตรฐานบริษัท: data/error เท่านั้น |
+| 2026-04-29 | tesseract OCR ใน Docker | รองรับ Scanned PDF ภาษาไทย |
+| 2026-04-29 | pgvector auto-init via SQL | ไม่ต้องรัน CREATE EXTENSION ด้วยมือ |
+| 2026-04-29 | Rule-based Intent Classifier | เริ่มง่าย ค่อย upgrade เป็น LLM-based |
+
+---
+
+## 11. สิ่งที่ยังขาด — ก่อน Production
+
+### บริษัท: นูทริชั่น โปรเฟส (อาหารเสริม)
+Use Case หลัก 2 กลุ่ม:
+
+```
+กลุ่มที่ 1: คำถามทั่วไปองค์กร
+→ นโยบาย, สวัสดิการ, ระเบียบ, ประกาศ HR
+→ ใช้ RAG (เอกสาร PDF/Word)
+
+กลุ่มที่ 2: ข้อมูลสินค้าและธุรกิจ
+→ สินค้า, stock, ราคา, order, รายงานผู้บริหาร
+→ ใช้ MCP (API/Database)
+```
+
+---
+
+### 11.1 RAG — Flow เอกสารใหม่ (ยังขาด)
+
+**ปัจจุบัน:** Upload ทีละไฟล์ผ่าน API เท่านั้น
+
+**ที่ต้องเพิ่ม:**
+
+```
+Flow เอกสารใหม่เข้าระบบ:
+
+1. มีเอกสารใหม่ (PDF/Word/Excel)
+        ↓
+2. วางไว้ใน folder ที่กำหนด
+   หรือ Upload ผ่าน Web UI
+        ↓
+3. ระบบ parse → chunk → embed
+        ↓
+4. บันทึกลง pgvector พร้อม metadata:
+   - ชื่อไฟล์
+   - วันที่อัพโหลด
+   - ประเภทเอกสาร (HR/Product/Policy)
+   - version
+        ↓
+5. แจ้ง Admin ว่า ingest สำเร็จ
+        ↓
+6. AI พร้อมตอบจากเอกสารใหม่ทันที
+```
+
+**TODO:**
+- [ ] Web UI สำหรับ Admin อัพโหลดเอกสาร
+- [ ] Batch ingest (อัพหลายไฟล์พร้อมกัน)
+- [ ] Document versioning (เอกสารเก่า vs ใหม่)
+- [ ] Document management (ลบ/แก้ไข/ดูรายการ)
+- [ ] Endpoint: `GET /v1/rag/documents` ดูรายการเอกสารทั้งหมด
+- [ ] Endpoint: `DELETE /v1/rag/documents/:id` ลบเอกสาร
+- [ ] รองรับ Word (.docx) และ Excel (.xlsx)
+
+---
+
+### 11.2 MCP / API Integration (ยังขาดทั้งหมด)
+
+**ปัจจุบัน:** SQLServerAdapter โครงสร้างพร้อม แต่ยังไม่ได้เชื่อมต่อจริง
+
+**Use Cases ที่ต้องเพิ่ม:**
+
+#### Phase A — ข้อมูลสินค้า (Read-only)
+```
+"สินค้า X มี stock เหลือเท่าไหร่?"
+"ราคาสินค้า Y คืออะไร?"
+"สินค้าตัวไหนขายดีที่สุดเดือนนี้?"
+→ MCP → Product API / DB
+```
+
+#### Phase B — รายงานผู้บริหาร (Read-only)
+```
+"ยอดขายสัปดาห์นี้เป็นยังไง?"
+"สรุปยอด order เดือนนี้"
+"เปรียบเทียบยอดขาย Q1 vs Q2"
+→ MCP → ERP / Sales DB → สร้าง Report
+```
+
+#### Phase C — Action (Write — ระวัง)
+```
+"เพิ่ม order สินค้า X จำนวน 100 ชิ้น"
+→ MCP → Order API (ต้อง confirm ก่อนทุกครั้ง)
+```
+
+**TODO:**
+- [ ] เชื่อมต่อ Product API / DB จริง
+- [ ] เชื่อมต่อ ERP / Sales DB
+- [ ] Tool: `get_product_stock` — ดู stock สินค้า
+- [ ] Tool: `get_sales_report` — ดูรายงานยอดขาย
+- [ ] Tool: `get_product_info` — ดูข้อมูลสินค้า
+- [ ] Tool: `create_order` — สร้าง order (Phase C, ต้อง confirm)
+- [ ] Confirmation Layer — ก่อน write ต้องให้ user confirm
+
+---
+
+### 11.3 Session Management (ยังขาด)
+
+**ปัจจุบัน:** AI จำการสนทนาไม่ได้เลย ทุก message = เริ่มใหม่
+
+**TODO:**
+- [ ] เก็บ history ใน PostgreSQL
+- [ ] Session expire (เช่น 30 นาที)
+- [ ] Header `X-Session-ID` ที่ออกแบบไว้ตั้งแต่แรก
+
+---
+
+### 11.4 Authentication (ยังขาด)
+
+**ปัจจุบัน:** ใครก็เรียก API ได้
+
+**TODO:**
+- [ ] API Key สำหรับ Service-to-Service
+- [ ] JWT สำหรับ User login
+- [ ] Role-based: Admin (อัพเอกสาร) vs User (แค่ถาม)
+
+---
+
+### 11.5 Open WebUI → Orchestrator (ยังไม่เชื่อมกัน)
+
+**ปัจจุบัน:** WebUI คุยกับ Ollama ตรงๆ ไม่ผ่าน RAG/Intent Router
+
+**TODO:**
+- [ ] เปลี่ยน WebUI ให้ชี้มาที่ Go Orchestrator port 50000
+- [ ] ทดสอบ Chat ผ่าน WebUI → RAG → คำตอบจากเอกสาร
+
+---
+
+### 11.6 Production Readiness (Phase 4)
+
+**TODO:**
+- [ ] ย้ายไป Ubuntu Server + NVIDIA Blackwell
+- [ ] เปลี่ยนจาก Ollama → vLLM (แค่แก้ .env)
+- [ ] เปลี่ยน Model: qwen2.5:7b → qwen2.5:32B
+- [ ] Monitoring: Prometheus + Grafana (commented ใน docker-compose)
+- [ ] golang-migrate แทน InitSchema()
+- [ ] Load testing ก่อน production
+
+---
+
+## 12. Enterprise Considerations (บริษัท 1,000 คน / ตลาดหลักทรัพย์)
+
+### 12.1 Vector DB Scaling Plan
+
+```
+ขนาดข้อมูลที่คาดการณ์:
+เอกสาร HR + Product + Finance + Legal ≈ 1,700+ ไฟล์
+Vector chunks ≈ 20,000-50,000 chunks
+```
+
+| ช่วง | Vector Size | แนวทาง |
+|---|---|---|
+| ตอนนี้ | < 50,000 | pgvector + IVFFlat Index |
+| ระยะกลาง | 50,000-500,000 | pgvector + tune index + monitor |
+| ระยะยาว | > 500,000 | พิจารณาย้าย Qdrant / Weaviate |
+
+**TODO:**
+- [ ] เพิ่ม IVFFlat Index ใน pgvector schema
+- [ ] Monitor query time เมื่อข้อมูลเพิ่มขึ้น
+- [ ] ทดสอบ performance ที่ 10,000 / 50,000 / 100,000 chunks
+
+---
+
+### 12.2 Security & Access Control (สำคัญมาก)
+
+**ปัจจุบัน:** ใครก็เรียก API ได้ ไม่มีการแบ่งสิทธิ์
+
+**ที่ต้องมี:**
+
+```
+Role ที่ต้องการ:
+├── Admin     → อัพโหลดเอกสาร, จัดการระบบ
+├── Manager   → ดูรายงาน, ถามข้อมูลธุรกิจ
+└── Employee  → ถามนโยบาย HR, สวัสดิการ
+```
+
+**Document Access Control:**
+```
+เอกสารลับ (Confidential):
+→ ผู้บริหารเท่านั้น
+→ เช่น รายงานการเงิน, กลยุทธ์บริษัท
+
+เอกสารทั่วไป (Internal):
+→ พนักงานทุกคน
+→ เช่น นโยบาย HR, สวัสดิการ
+
+เอกสารสาธารณะ (Public):
+→ ทุกคน
+→ เช่น ข้อมูลสินค้า, แคตตาล็อก
+```
+
+**TODO:**
+- [ ] เพิ่ม `role` field ใน Document model
+- [ ] เพิ่ม `access_level` ใน pgvector schema
+- [ ] JWT Authentication พร้อม role claims
+- [ ] Filter documents ตาม role ก่อน Search
+- [ ] Admin Panel สำหรับจัดการสิทธิ์เอกสาร
+
+---
+
+### 12.3 Audit Log (บริษัทตลาดหลักทรัพย์ต้องมี)
+
+**ปัจจุบัน:** ไม่มี log เลย
+
+**ที่ต้องมี:**
+```
+ทุก Query ต้องบันทึก:
+- User ID ที่ถาม
+- คำถามที่ถาม
+- Intent ที่ตัดสินใจ (RAG/MCP/Direct)
+- เอกสารที่ดึงมาใช้ (source)
+- คำตอบที่ AI ให้
+- เวลา + IP Address
+```
+
+**ทำไมต้องมี:**
+```
+✅ Compliance — ตลาดหลักทรัพย์กำหนด
+✅ Security — ตรวจสอบถ้ามีการรั่วไหล
+✅ Improve — ดูว่า AI ตอบผิดบ่อยไหม
+✅ Legal — หลักฐานถ้ามีข้อพิพาท
+```
+
+**TODO:**
+- [ ] สร้างตาราง `audit_logs` ใน PostgreSQL
+- [ ] บันทึกทุก request/response
+- [ ] Endpoint: `GET /v1/admin/logs` ดู log
+- [ ] Log retention policy (เก็บกี่เดือน?)
+
+---
+
+### 12.4 Data Governance
+
+**ที่ต้องกำหนดก่อน Deploy จริง:**
+
+```
+1. เอกสารไหนที่ AI "ห้าม" ตอบ?
+   → เช่น ข้อมูลส่วนตัวพนักงาน, เงินเดือน
+
+2. AI ตอบผิดแล้วทำยังไง?
+   → มี Feedback mechanism
+
+3. เอกสารหมดอายุแล้วทำยังไง?
+   → ระบบ expire เอกสารเก่า
+
+4. ใครเป็น AI Owner ในองค์กร?
+   → คนรับผิดชอบ approve เอกสารที่ AI ใช้
+```
+
+**TODO:**
+- [ ] กำหนด Data Classification policy
+- [ ] สร้าง Feedback endpoint (`POST /v1/feedback`)
+- [ ] Document expiry system
+- [ ] กำหนด AI Owner role
+
+---
+
+### 12.5 Performance สำหรับ 1,000 Users
+
+```
+ถ้าพนักงาน 1,000 คนใช้พร้อมกัน:
+
+Concurrent users: ~50-100 คน (ในเวลาเดียวกัน)
+Request/minute:   ~200-500 requests
+
+iMac M1 16GB รับได้ไหม?
+→ PoC: ได้ แต่จะช้าถ้าหลายคนพร้อมกัน
+→ Production: ต้องย้าย Ubuntu + vLLM + GPU
+```
+
+**TODO:**
+- [ ] Load testing ก่อน deploy จริง
+- [ ] Rate limiting per user
+- [ ] Queue system ถ้า request เยอะ
+- [ ] Horizontal scaling plan
