@@ -16,6 +16,7 @@
 /orchestrator
 
 # IDE
+.claude
 .vscode/
 .idea/
 *.swp
