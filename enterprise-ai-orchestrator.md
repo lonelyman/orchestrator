@@ -1,5 +1,4 @@
 # Enterprise AI Orchestrator — Living Document
-
 > **Last Updated:** 2026-04-28
 > **Status:** Phase 0 — Foundation (In Progress)
 > **วิธีใช้:** ทุกครั้งที่เปิด session ใหม่ ให้ paste document นี้ให้ Claude ดูก่อน แล้วจะ update ต่อได้เลย
@@ -14,14 +13,13 @@
 
 ## 2. Hardware
 
-| Role                         | Machine       | Spec                    |
-| ---------------------------- | ------------- | ----------------------- |
-| **Development / PoC Server** | iMac          | Apple M1, 16GB RAM      |
-| **Client**                   | MacBook Pro   | sysadmins-MacBook-Pro-2 |
-| **Production (อนาคต)**       | Ubuntu Server | NVIDIA Blackwell        |
+| Role | Machine | Spec |
+|---|---|---|
+| **Development / PoC Server** | iMac | Apple M1, 16GB RAM |
+| **Client** | MacBook Pro | sysadmins-MacBook-Pro-2 |
+| **Production (อนาคต)** | Ubuntu Server | NVIDIA Blackwell |
 
 **การเข้าถึง Server:**
-
 ```bash
 ssh imac_testai@10.19.105.32
 ```
@@ -48,15 +46,14 @@ iMac M1 16GB (Server)
 
 ### Port Map
 
-| Service         | Port                                | หมายเหตุ       |
-| --------------- | ----------------------------------- | -------------- |
-| Ollama          | 11434 (internal) / 51434 (external) | Native on M1   |
-| Open WebUI      | 53000                               | Chat Interface |
-| Go Orchestrator | 50000                               | Backend API    |
-| PostgreSQL      | 5432                                | Vector DB      |
+| Service | Port | หมายเหตุ |
+|---|---|---|
+| Ollama | 11434 (internal) / 51434 (external) | Native on M1 |
+| Open WebUI | 53000 | Chat Interface |
+| Go Orchestrator | 50000 | Backend API |
+| PostgreSQL | 5432 | Vector DB |
 
 ### API Design
-
 - **Standard:** OpenAI-compatible (`/v1/chat/completions`)
 - **Gateway-ready:** รองรับ Header `X-User-ID`, `X-Session-ID` ตั้งแต่แรก
 - **Migration-ready:** ทุก LLM connection ผ่าน Interface → สลับ Ollama → vLLM ได้ใน `.env`
@@ -65,19 +62,18 @@ iMac M1 16GB (Server)
 
 ## 4. Tech Stack Decisions
 
-| ด้าน              | PoC                      | Production               |
-| ----------------- | ------------------------ | ------------------------ |
-| **Language**      | Go (Golang)              | Go (Golang)              |
-| **Framework**     | Fiber v3                 | Fiber v3                 |
-| **LLM Engine**    | Ollama (Native M1)       | vLLM (Docker, Ubuntu)    |
-| **Primary Model** | qwen2.5:7b               | qwen2.5:32B MoE          |
-| **Embedding**     | nomic-embed-text         | nomic / OpenAI (สลับได้) |
-| **Vector DB**     | pgvector (PostgreSQL 16) | pgvector (PostgreSQL 16) |
-| **Architecture**  | Hexagonal Architecture   | Hexagonal Architecture   |
-| **Session**       | Isolated per user        | Shared Knowledge Base    |
+| ด้าน | PoC | Production |
+|---|---|---|
+| **Language** | Go (Golang) | Go (Golang) |
+| **Framework** | Fiber v3 | Fiber v3 |
+| **LLM Engine** | Ollama (Native M1) | vLLM (Docker, Ubuntu) |
+| **Primary Model** | qwen2.5:7b | qwen2.5:32B MoE |
+| **Embedding** | nomic-embed-text | nomic / OpenAI (สลับได้) |
+| **Vector DB** | pgvector (PostgreSQL 16) | pgvector (PostgreSQL 16) |
+| **Architecture** | Hexagonal Architecture | Hexagonal Architecture |
+| **Session** | Isolated per user | Shared Knowledge Base |
 
 ### Key Design Principles
-
 - **Migration-Ready:** ทุก connection ผ่าน Interface
 - **Zero-Trust MCP:** SQL Server → Read-only + Validation Layer เสมอ
 - **Gateway-Ready:** ออกแบบรองรับ API Gateway (Kong/Traefik) ตั้งแต่แรก
@@ -132,13 +128,12 @@ type EmbedderPort interface {
 
 ## 6. Intent Router
 
-| Phase     | วิธี                      | สถานะ    |
-| --------- | ------------------------- | -------- |
-| Phase 0-1 | Rule-based (keyword scan) | 🔜 Next  |
-| Phase 3   | LLM-based classifier      | ⏳ อนาคต |
+| Phase | วิธี | สถานะ |
+|---|---|---|
+| Phase 0-1 | Rule-based (keyword scan) | 🔜 Next |
+| Phase 3 | LLM-based classifier | ⏳ อนาคต |
 
 ### Intent Types
-
 - `direct` → LLM ตอบตรงๆ
 - `rag` → ดึง context จาก pgvector ก่อน
 - `mcp` → Query SQL Server ผ่าน MCP Bridge
@@ -148,13 +143,13 @@ type EmbedderPort interface {
 
 ## 7. Roadmap
 
-| Phase       | หัวข้อ                                   | สถานะ                                   |
-| ----------- | ---------------------------------------- | --------------------------------------- |
-| **Phase 0** | Foundation: Ollama + Docker + Go + WebUI | ✅ Done                                 |
-| **Phase 1** | RAG: Vector Ingestion + Search           | ✅ Done                                 |
-| **Phase 2** | MCP: SQL Server Bridge                   | ✅ Structure Ready (SQL Server pending) |
-| **Phase 3** | Orchestration: Intent Router รวมร่าง     | ⏳                                      |
-| **Phase 4** | Production: Ubuntu + vLLM + Blackwell    | ⏳                                      |
+| Phase | หัวข้อ | สถานะ |
+|---|---|---|
+| **Phase 0** | Foundation: Ollama + Docker + Go + WebUI | ✅ Done |
+| **Phase 1** | RAG: Vector Ingestion + Search | ✅ Done |
+| **Phase 2** | MCP: SQL Server Bridge | ✅ Structure Ready (SQL Server pending) |
+| **Phase 3** | Orchestration: Intent Router รวมร่าง | ⏳ |
+| **Phase 4** | Production: Ubuntu + vLLM + Blackwell | ⏳ |
 
 ---
 
@@ -163,31 +158,26 @@ type EmbedderPort interface {
 ### ✅ Completed
 
 #### [2026-04-28] SSH Setup
-
 - เปิด Remote Login บน iMac
 - เชื่อมต่อ MacBook → iMac สำเร็จ
 - Command: `ssh imac_testai@10.19.105.32`
 
 #### [2026-04-28] Ollama Installation
-
 - ติดตั้งผ่าน Homebrew: `brew install ollama`
 - Version: `0.21.2_1`
 - รันเป็น Background Service: `brew services start ollama`
 
 #### [2026-04-28] Ollama Optimization
-
 - เปิด Flash Attention: `OLLAMA_FLASH_ATTENTION=1`
-   - ผล: เร็วขึ้น ~20%, คำนวณ Attention เป็น block แทน token
+  - ผล: เร็วขึ้น ~20%, คำนวณ Attention เป็น block แทน token
 - เปิด KV Cache Quantization: `OLLAMA_KV_CACHE_TYPE=q8_0`
-   - ผล: ประหยัด RAM ~30%, แทบไม่เสีย quality
+  - ผล: ประหยัด RAM ~30%, แทบไม่เสีย quality
 
 #### [2026-04-28] Model Pull
-
 - `qwen2.5:7b` — 4.7GB ✅
 - `nomic-embed-text` — 274MB ✅
 
 #### [2026-04-28] Model Test
-
 - Thai language: ✅ ตอบภาษาไทยได้
 - Speed: ✅ ผ่านการ optimize แล้ว
 - M1 Metal: ✅ ทำงานได้จริง
@@ -195,25 +185,21 @@ type EmbedderPort interface {
 ---
 
 #### [2026-04-28] Docker Desktop
-
 - ติดตั้ง Docker Desktop version 29.4.1 ✅
 - ทดสอบด้วย hello-world (arm64v8) ✅
 
 #### [2026-04-28] docker-compose — PostgreSQL + Open WebUI
-
 - ไฟล์: ~/orchestrator/docker/docker-compose.yml
 - PostgreSQL 16 + pgvector: port 5432 ✅
 - Open WebUI: port 53000 ✅
 - เชื่อมต่อ Ollama ผ่าน host.docker.internal:11434 ✅
 
 #### [2026-04-28] WebUI Configuration
-
 - ตั้ง Default System Prompt: English instruction / Thai response ✅
 - Disable nomic-embed-text และ qwen:latest ออกจาก model list ✅
 - Enable เฉพาะ qwen2.5:7b ✅
 
 #### [2026-04-28] Phase 0 ทดสอบสำเร็จ
-
 - Chat ภาษาไทยผ่าน WebUI → Ollama ✅
 - M1 Metal GPU 100% ✅
 - System Prompt บังคับภาษาไทยได้ ✅
@@ -221,40 +207,36 @@ type EmbedderPort interface {
 ---
 
 #### [2026-04-28] Go Installation
-
 - Go 1.26.2 darwin/arm64 ✅
 - go mod init: `github.com/enterprise-ai/orchestrator` ✅
 
 #### [2026-04-28] VS Code Remote SSH
-
 - Extension: Remote - SSH ✅
 - เชื่อมต่อ MacBook → iMac โดยตรง ✅
 - เปิด folder: `/Users/imac_testai/orchestrator` ✅
 
 #### [2026-04-28] Git Setup
-
 - git init + push ขึ้น GitHub ✅
 - Branch: main (protected), dev (ทำงาน) ✅
 - Remote: https://github.com/lonelyman/orchestrator.git ✅
 
 #### [2026-04-28] Go Files Created (Phase 0)
 
-| ไฟล์                                         | Package      | หน้าที่                                         |
-| -------------------------------------------- | ------------ | ----------------------------------------------- |
-| `internal/domain/models/chat.go`             | models       | ChatMessage, ChatRequest, ChatResponse, Session |
-| `internal/domain/ports/llm.go`               | ports        | LLMPort interface                               |
-| `internal/infrastructure/llm/ollama.go`      | llm          | OllamaAdapter (implements LLMPort)              |
-| `internal/core/orchestrator/orchestrator.go` | orchestrator | สมองกลาง รับ request ส่งต่อ LLM                 |
+| ไฟล์ | Package | หน้าที่ |
+|---|---|---|
+| `internal/domain/models/chat.go` | models | ChatMessage, ChatRequest, ChatResponse, Session |
+| `internal/domain/ports/llm.go` | ports | LLMPort interface |
+| `internal/infrastructure/llm/ollama.go` | llm | OllamaAdapter (implements LLMPort) |
+| `internal/core/orchestrator/orchestrator.go` | orchestrator | สมองกลาง รับ request ส่งต่อ LLM |
 
 #### [2026-04-28] Go Orchestrator Phase 0 — สำเร็จ ✅
 
-| ไฟล์                 | Package | หน้าที่              |
-| -------------------- | ------- | -------------------- |
-| `config/config.go`   | config  | โหลด env variables   |
-| `cmd/server/main.go` | main    | Fiber v3 HTTP Server |
+| ไฟล์ | Package | หน้าที่ |
+|---|---|---|
+| `config/config.go` | config | โหลด env variables |
+| `cmd/server/main.go` | main | Fiber v3 HTTP Server |
 
 **ทดสอบผ่านทั้งหมด:**
-
 - `GET /health` → `{"status":"healthy"}` ✅
 - `POST /v1/chat/completions` → ตอบภาษาไทย ✅
 - Git commit: `feat: phase 0 - go orchestrator with ollama adapter` ✅
@@ -263,22 +245,20 @@ type EmbedderPort interface {
 
 #### [2026-04-28] Phase 1 RAG Engine — สำเร็จ ✅
 
-| ไฟล์                                         | Package  | หน้าที่                          |
-| -------------------------------------------- | -------- | -------------------------------- |
-| `internal/domain/ports/embedder.go`          | ports    | EmbedderPort interface           |
-| `internal/domain/ports/vector.go`            | ports    | VectorPort interface             |
-| `internal/domain/models/document.go`         | models   | Document, SearchResult           |
-| `internal/infrastructure/embedder/nomic.go`  | embedder | NomicAdapter (nomic-embed-text)  |
-| `internal/infrastructure/vector/pgvector.go` | vector   | PgvectorAdapter + fallback logic |
-| `internal/core/rag/rag.go`                   | rag      | Ingest + Search + BuildContext   |
+| ไฟล์ | Package | หน้าที่ |
+|---|---|---|
+| `internal/domain/ports/embedder.go` | ports | EmbedderPort interface |
+| `internal/domain/ports/vector.go` | ports | VectorPort interface |
+| `internal/domain/models/document.go` | models | Document, SearchResult |
+| `internal/infrastructure/embedder/nomic.go` | embedder | NomicAdapter (nomic-embed-text) |
+| `internal/infrastructure/vector/pgvector.go` | vector | PgvectorAdapter + fallback logic |
+| `internal/core/rag/rag.go` | rag | Ingest + Search + BuildContext |
 
 **Key Fix — pgvector Search:**
-
 - ปัญหา: similarity search ได้ 0 แถวทั้งที่มีข้อมูลใน DB
 - แก้ด้วย: parameterized query + fallback ดึงเอกสารล่าสุดเมื่อ similarity = 0
 
 **ทดสอบผ่านทั้งหมด:**
-
 - `POST /v1/rag/ingest` → บันทึกเอกสารลง pgvector ✅
 - `POST /v1/chat/completions` → AI ตอบโดยอ้างอิงเอกสารจริง ✅
 - RAG context อ้าง source: HR-Policy-2024.pdf ✅
@@ -286,23 +266,27 @@ type EmbedderPort interface {
 
 ---
 
-#### [2026-04-29] PDF Upload + OCR — สำเร็จ ✅
+#### [2026-04-29] ทดสอบบน iMac Server — สำเร็จ ✅
 
-- Copilot เพิ่ม 3-layer PDF fallback: pdftotext → Go PDF → tesseract OCR ✅
-- tesseract รองรับภาษาไทย (tha+eng) ✅
-- Upload PDF จริง "บค.002-2568 OT Policy" → 5 chunks ✅
-- Chat ถามเรื่อง OT → AI ตอบจากเอกสารจริง ✅
-- เปลี่ยนกลับใช้ qwen2.5:7b แทน qwen3.5:cloud ✅
+- git pull บน iMac ✅
+- docker compose up --build ✅
+- pgvector extension auto-init ผ่าน docker/init/01-extensions.sql ✅
+- Upload PDF จาก MacBook → iMac Server ✅
+- Chat จาก Postman → iMac Server → AI ตอบจากเอกสารจริง ✅
 
-| ไฟล์                                       | Package | หน้าที่                                 |
-| ------------------------------------------ | ------- | --------------------------------------- |
-| `internal/domain/models/mcp.go`            | models  | Tool, ToolCall, ToolResult              |
-| `internal/domain/ports/mcp.go`             | ports   | MCPPort interface                       |
-| `internal/core/mcp/executor.go`            | mcp     | Tool Registry + Executor                |
-| `internal/infrastructure/mcp/sqlserver.go` | mcp     | SQLServerAdapter (Zero-Trust Read-only) |
+**Production-ready Flow:**
+```
+MacBook (Postman) → 10.19.105.32:50000 → Go Orchestrator → Ollama + pgvector
+```
+
+| ไฟล์ | Package | หน้าที่ |
+|---|---|---|
+| `internal/domain/models/mcp.go` | models | Tool, ToolCall, ToolResult |
+| `internal/domain/ports/mcp.go` | ports | MCPPort interface |
+| `internal/core/mcp/executor.go` | mcp | Tool Registry + Executor |
+| `internal/infrastructure/mcp/sqlserver.go` | mcp | SQLServerAdapter (Zero-Trust Read-only) |
 
 **Zero-Trust Validation:**
-
 - SELECT เท่านั้น ✅
 - Block: INSERT, UPDATE, DELETE, DROP, CREATE, ALTER, TRUNCATE, EXEC ✅
 - Driver: `github.com/microsoft/go-mssqldb` ✅
@@ -313,12 +297,10 @@ type EmbedderPort interface {
 **ปัญหา:** PDF แบบ Scanned Image (ที่ Mac OCR ให้อัตโนมัติ) pdftotext ใน Docker อ่านไม่ออก
 
 **Workaround ชั่วคราว:**
-
 - ใช้ `/v1/rag/ingest` ส่ง text ตรงๆ แทน
 - หรือ Export PDF เป็น .txt ก่อน upload
 
 **แนวทางแก้จริง (TODO):**
-
 - เพิ่ม tesseract OCR ใน Dockerfile
 - รองรับภาษาไทย (tesseract-lang-tha)
 - แปลง PDF page → image → OCR → text
@@ -336,7 +318,6 @@ type EmbedderPort interface {
 ## 9. Configuration
 
 ### Ollama Service
-
 ```
 Location: Native on iMac M1
 Service:  brew services (homebrew.mxcl.ollama)
@@ -346,7 +327,6 @@ Internal Port: 11434
 ```
 
 ### .env Template (จะสร้างเมื่อเริ่ม Go)
-
 ```env
 # LLM Backend
 LLM_BACKEND=ollama
@@ -373,11 +353,11 @@ API_PORT=50000
 
 ## 10. Notes & Decisions
 
-| วันที่     | การตัดสินใจ                       | เหตุผล                                        |
-| ---------- | --------------------------------- | --------------------------------------------- |
-| 2026-04-28 | ใช้ Ollama Native (ไม่ใช่ Docker) | รีด M1 Metal GPU ได้เต็มที่                   |
-| 2026-04-28 | qwen2.5:7b สำหรับ PoC             | Sweet spot: ไว + คุณภาพดี บน 16GB             |
-| 2026-04-28 | nomic-embed-text                  | เบา เร็ว รองรับ Matryoshka Embeddings         |
-| 2026-04-28 | English Prompt / Thai Response    | AI เข้าใจ logic ดีกว่า, ทีมใช้งานง่ายกว่า     |
-| 2026-04-28 | Hexagonal Architecture            | สลับ Ollama → vLLM ได้โดยไม่ rewrite          |
-| 2026-04-28 | Gateway-ready Headers             | รองรับ Kong/Traefik ในอนาคตโดยไม่ต้องแก้ code |
+| วันที่ | การตัดสินใจ | เหตุผล |
+|---|---|---|
+| 2026-04-28 | ใช้ Ollama Native (ไม่ใช่ Docker) | รีด M1 Metal GPU ได้เต็มที่ |
+| 2026-04-28 | qwen2.5:7b สำหรับ PoC | Sweet spot: ไว + คุณภาพดี บน 16GB |
+| 2026-04-28 | nomic-embed-text | เบา เร็ว รองรับ Matryoshka Embeddings |
+| 2026-04-28 | English Prompt / Thai Response | AI เข้าใจ logic ดีกว่า, ทีมใช้งานง่ายกว่า |
+| 2026-04-28 | Hexagonal Architecture | สลับ Ollama → vLLM ได้โดยไม่ rewrite |
+| 2026-04-28 | Gateway-ready Headers | รองรับ Kong/Traefik ในอนาคตโดยไม่ต้องแก้ code |
