@@ -36,7 +36,11 @@ func JWTMiddleware(jwt *auth.JWTManager) fiber.Handler {
 		// Verify JWT
 		claims, err := jwt.Verify(parts[1])
 		if err != nil {
-			slog.Warn("invalid token", "error", err)
+			requestID, _ := c.Locals(RequestIDKey).(string)
+			slog.Warn("invalid token",
+				"request_id", requestID,
+				"error", RedactLogValue(err.Error()),
+			)
 			return c.Status(401).JSON(fiber.Map{
 				"error": fiber.Map{
 					"message": "invalid or expired token",

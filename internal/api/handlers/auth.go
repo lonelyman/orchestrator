@@ -3,6 +3,7 @@ package handlers
 import (
 	"log/slog"
 
+	"github.com/enterprise-ai/orchestrator/internal/api/middleware"
 	"github.com/enterprise-ai/orchestrator/internal/domain/models"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/auth"
 	"github.com/gofiber/fiber/v3"
@@ -21,6 +22,8 @@ func NewAuthHandler(ldap *auth.LDAPAdapter, jwt *auth.JWTManager) *AuthHandler {
 
 // Login รับ username/password แล้วตรวจสอบกับ AD
 func (h *AuthHandler) Login(c fiber.Ctx) error {
+	requestID, _ := c.Locals(middleware.RequestIDKey).(string)
+
 	var req models.LoginRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return Fail(c, 400, "invalid request", "BAD_REQUEST")
@@ -33,18 +36,22 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 	// ตรวจสอบกับ AD
 	user, err := h.ldap.Authenticate(req.Username, req.Password)
 	if err != nil {
-		slog.Warn("login failed", "username", req.Username, "error", err)
+		slog.Warn("login failed",
+			"request_id", requestID,
+			"username", req.Username,
+			"error", middleware.RedactLogValue(err.Error()),
+		)
 		return Fail(c, 401, "invalid credentials", "UNAUTHORIZED")
 	}
 
 	// สร้าง JWT
 	token, expiresAt, err := h.jwt.Generate(user)
 	if err != nil {
-		slog.Error("generate token failed", "error", err)
+		slog.Error("generate token failed", "request_id", requestID, "error", middleware.RedactLogValue(err.Error()))
 		return Fail(c, 500, "token generation failed", "SERVER_ERROR")
 	}
 
-	slog.Info("login success", "username", user.Username, "department", user.Department)
+	slog.Info("login success", "request_id", requestID, "username", user.Username, "department", user.Department)
 
 	return OK(c, models.LoginResponse{
 		Token:     token,

@@ -34,6 +34,9 @@ func NewRouter(deps RouterDependencies) *fiber.App {
 
 	app.Use(middleware.RequestIDMiddleware())
 	app.Use(middleware.RecoveryMiddleware())
+	app.Use(middleware.SecurityHeadersMiddleware(deps.Config))
+	app.Use(middleware.CORSMiddleware(deps.Config))
+	app.Use(middleware.RequestLogMiddleware())
 
 	RegisterRoutes(app, deps)
 	return app

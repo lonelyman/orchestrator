@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -19,10 +20,13 @@ const (
 // AppConfig เก็บ configuration ทั้งหมดของระบบ
 type AppConfig struct {
 	// Server
-	APIPort         string
-	BodyLimit       int
-	HealthTimeout   time.Duration
-	ShutdownTimeout time.Duration
+	APIPort              string
+	BodyLimit            int
+	HealthTimeout        time.Duration
+	ShutdownTimeout      time.Duration
+	AllowedOrigins       []string
+	CSPPolicy            string
+	CORSAllowCredentials bool
 
 	// LLM
 	LLMBackend string
@@ -63,6 +67,8 @@ type AppConfig struct {
 	ChatTimeout       time.Duration
 	RAGIngestTimeout  time.Duration
 	AuditTimeout      time.Duration
+	AuditWorkers      int
+	AuditQueueSize    int
 	MigrationTimeout  time.Duration
 	RateLimitPerMin   int
 	MaxUploadBytes    int64
@@ -130,6 +136,14 @@ func Load() (*AppConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+	auditWorkers, err := parsePositiveInt("AUDIT_WORKERS", "4")
+	if err != nil {
+		return nil, err
+	}
+	auditQueueSize, err := parsePositiveInt("AUDIT_QUEUE_SIZE", "1000")
+	if err != nil {
+		return nil, err
+	}
 	healthTimeout, err := parseDuration("HEALTH_TIMEOUT", "5s")
 	if err != nil {
 		return nil, err
@@ -183,6 +197,14 @@ func Load() (*AppConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+	allowedOrigins, err := parseAllowedOrigins("ALLOWED_ORIGINS")
+	if err != nil {
+		return nil, err
+	}
+	corsAllowCredentials, err := parseBool("CORS_ALLOW_CREDENTIALS", "false")
+	if err != nil {
+		return nil, err
+	}
 
 	cfg := &AppConfig{
 		DevMode:                 devMode,
@@ -190,6 +212,9 @@ func Load() (*AppConfig, error) {
 		DevPassword:             getEnv("DEV_PASSWORD", "dev1234"),
 		APIPort:                 getEnv("API_PORT", "50000"),
 		BodyLimit:               int(maxUploadBytes + (1 << 20)),
+		AllowedOrigins:          allowedOrigins,
+		CSPPolicy:               getEnv("CSP_POLICY", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"),
+		CORSAllowCredentials:    corsAllowCredentials,
 		LLMBackend:              getEnv("LLM_BACKEND", "ollama"),
 		LLMHost:                 getEnv("LLM_HOST", "localhost"),
 		LLMPort:                 getEnv("LLM_PORT", "11434"),
@@ -219,6 +244,8 @@ func Load() (*AppConfig, error) {
 		ChatTimeout:       chatTimeout,
 		RAGIngestTimeout:  ragIngestTimeout,
 		AuditTimeout:      auditTimeout,
+		AuditWorkers:      auditWorkers,
+		AuditQueueSize:    auditQueueSize,
 		HealthTimeout:     healthTimeout,
 		ShutdownTimeout:   shutdownTimeout,
 		MigrationTimeout:  migrationTimeout,
@@ -285,6 +312,12 @@ func (c *AppConfig) Validate() error {
 	if c.AuditTimeout <= 0 {
 		errs = append(errs, fmt.Errorf("AUDIT_TIMEOUT must be greater than zero"))
 	}
+	if c.AuditWorkers <= 0 {
+		errs = append(errs, fmt.Errorf("AUDIT_WORKERS must be greater than zero"))
+	}
+	if c.AuditQueueSize <= 0 {
+		errs = append(errs, fmt.Errorf("AUDIT_QUEUE_SIZE must be greater than zero"))
+	}
 	if c.HealthTimeout <= 0 {
 		errs = append(errs, fmt.Errorf("HEALTH_TIMEOUT must be greater than zero"))
 	}
@@ -314,6 +347,9 @@ func (c *AppConfig) Validate() error {
 	}
 	if c.RateLimitPerMin <= 0 {
 		errs = append(errs, fmt.Errorf("RATE_LIMIT_PER_MINUTE must be greater than zero"))
+	}
+	if c.CORSAllowCredentials && containsWildcardOrigin(c.AllowedOrigins) {
+		errs = append(errs, fmt.Errorf("CORS_ALLOW_CREDENTIALS cannot be true when ALLOWED_ORIGINS contains *"))
 	}
 	if c.MaxUploadBytes <= 0 || c.MaxUploadMegabyte <= 0 {
 		errs = append(errs, fmt.Errorf("MAX_UPLOAD_MB must be greater than zero"))
@@ -411,6 +447,44 @@ func parseDuration(key, defaultVal string) (time.Duration, error) {
 		return 0, fmt.Errorf("invalid %s: must be greater than zero", key)
 	}
 	return parsed, nil
+}
+
+func parseAllowedOrigins(key string) ([]string, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return nil, nil
+	}
+
+	parts := strings.Split(raw, ",")
+	origins := make([]string, 0, len(parts))
+	for _, part := range parts {
+		origin := strings.TrimSpace(part)
+		if origin == "" {
+			continue
+		}
+		if origin == "*" {
+			origins = append(origins, origin)
+			continue
+		}
+		u, err := url.Parse(origin)
+		if err != nil || u.Scheme == "" || u.Host == "" || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+			return nil, fmt.Errorf("invalid %s origin: %s", key, origin)
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			return nil, fmt.Errorf("invalid %s origin scheme: %s", key, origin)
+		}
+		origins = append(origins, strings.ToLower(origin))
+	}
+	return origins, nil
+}
+
+func containsWildcardOrigin(origins []string) bool {
+	for _, origin := range origins {
+		if origin == "*" {
+			return true
+		}
+	}
+	return false
 }
 
 func loadSystemPrompt() (string, error) {

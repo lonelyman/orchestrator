@@ -17,6 +17,8 @@ var configEnvKeys = []string{
 	"CHAT_TIMEOUT",
 	"RAG_INGEST_TIMEOUT",
 	"AUDIT_TIMEOUT",
+	"AUDIT_WORKERS",
+	"AUDIT_QUEUE_SIZE",
 	"HEALTH_TIMEOUT",
 	"SHUTDOWN_TIMEOUT",
 	"MIGRATION_TIMEOUT",
@@ -54,6 +56,9 @@ var configEnvKeys = []string{
 	"JWT_EXPIRY",
 	"SYSTEM_PROMPT",
 	"SYSTEM_PROMPT_FILE",
+	"ALLOWED_ORIGINS",
+	"CSP_POLICY",
+	"CORS_ALLOW_CREDENTIALS",
 }
 
 func clearConfigEnv(t *testing.T) {
@@ -87,8 +92,20 @@ func TestLoad_AllowsDevDefaults(t *testing.T) {
 	if cfg.ChatTimeout != 120*time.Second {
 		t.Fatalf("expected default chat timeout 120s, got %s", cfg.ChatTimeout)
 	}
+	if cfg.AuditWorkers != 4 || cfg.AuditQueueSize != 1000 {
+		t.Fatalf("expected default audit queue 4 workers / 1000 size, got %d / %d", cfg.AuditWorkers, cfg.AuditQueueSize)
+	}
 	if cfg.ShutdownTimeout != 10*time.Second {
 		t.Fatalf("expected default shutdown timeout 10s, got %s", cfg.ShutdownTimeout)
+	}
+	if len(cfg.AllowedOrigins) != 0 {
+		t.Fatalf("expected default CORS deny list, got %v", cfg.AllowedOrigins)
+	}
+	if cfg.CORSAllowCredentials {
+		t.Fatalf("expected CORS credentials disabled by default")
+	}
+	if cfg.CSPPolicy == "" {
+		t.Fatalf("expected default CSP policy")
 	}
 	if cfg.MaxUploadMegabyte != 10 || cfg.MaxUploadBytes != 10<<20 {
 		t.Fatalf("expected default upload 10MB, got %d MB / %d bytes", cfg.MaxUploadMegabyte, cfg.MaxUploadBytes)
@@ -144,6 +161,62 @@ func TestLoad_RejectsInvalidOperationalLimit(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "RATE_LIMIT_PER_MINUTE") {
 		t.Fatalf("expected RATE_LIMIT_PER_MINUTE error, got %v", err)
+	}
+}
+
+func TestLoad_ParsesSecurityConfig(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("DEV_MODE", "true")
+	t.Setenv("ALLOWED_ORIGINS", "https://app.example.com, http://localhost:3000")
+	t.Setenv("CSP_POLICY", "default-src 'self'")
+	t.Setenv("CORS_ALLOW_CREDENTIALS", "true")
+	t.Setenv("AUDIT_WORKERS", "2")
+	t.Setenv("AUDIT_QUEUE_SIZE", "10")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(cfg.AllowedOrigins) != 2 {
+		t.Fatalf("expected two origins, got %v", cfg.AllowedOrigins)
+	}
+	if cfg.AllowedOrigins[0] != "https://app.example.com" || cfg.AllowedOrigins[1] != "http://localhost:3000" {
+		t.Fatalf("unexpected origins: %v", cfg.AllowedOrigins)
+	}
+	if cfg.CSPPolicy != "default-src 'self'" || !cfg.CORSAllowCredentials {
+		t.Fatalf("unexpected security config: csp=%q credentials=%v", cfg.CSPPolicy, cfg.CORSAllowCredentials)
+	}
+	if cfg.AuditWorkers != 2 || cfg.AuditQueueSize != 10 {
+		t.Fatalf("unexpected audit queue config: workers=%d size=%d", cfg.AuditWorkers, cfg.AuditQueueSize)
+	}
+}
+
+func TestLoad_RejectsInvalidAllowedOrigin(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("DEV_MODE", "true")
+	t.Setenv("ALLOWED_ORIGINS", "https://app.example.com/path")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(err.Error(), "ALLOWED_ORIGINS") {
+		t.Fatalf("expected ALLOWED_ORIGINS error, got %v", err)
+	}
+}
+
+func TestLoad_RejectsWildcardCorsCredentials(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("DEV_MODE", "true")
+	t.Setenv("ALLOWED_ORIGINS", "*")
+	t.Setenv("CORS_ALLOW_CREDENTIALS", "true")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(err.Error(), "CORS_ALLOW_CREDENTIALS") {
+		t.Fatalf("expected CORS_ALLOW_CREDENTIALS error, got %v", err)
 	}
 }
 
@@ -216,6 +289,8 @@ func TestLoad_AcceptsProductionConfig(t *testing.T) {
 	t.Setenv("JWT_EXPIRY", "30m")
 	t.Setenv("SESSION_EXPIRY", "45m")
 	t.Setenv("CHAT_TIMEOUT", "90s")
+	t.Setenv("AUDIT_WORKERS", "6")
+	t.Setenv("AUDIT_QUEUE_SIZE", "2000")
 	t.Setenv("SHUTDOWN_TIMEOUT", "15s")
 	t.Setenv("MAX_UPLOAD_MB", "25")
 	t.Setenv("DB_POOL_MAX_CONNS", "50")
@@ -250,6 +325,9 @@ func TestLoad_AcceptsProductionConfig(t *testing.T) {
 	}
 	if cfg.ShutdownTimeout != 15*time.Second {
 		t.Fatalf("expected shutdown timeout 15s, got %s", cfg.ShutdownTimeout)
+	}
+	if cfg.AuditWorkers != 6 || cfg.AuditQueueSize != 2000 {
+		t.Fatalf("unexpected audit config: workers=%d queue=%d", cfg.AuditWorkers, cfg.AuditQueueSize)
 	}
 	if cfg.MaxUploadBytes != 25<<20 {
 		t.Fatalf("expected max upload 25MB, got %d", cfg.MaxUploadBytes)

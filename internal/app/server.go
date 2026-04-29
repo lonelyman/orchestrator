@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/enterprise-ai/orchestrator/config"
 	"github.com/enterprise-ai/orchestrator/internal/api"
@@ -30,9 +31,12 @@ import (
 )
 
 type Server struct {
-	App       *fiber.App
-	pool      *pgxpool.Pool
-	sqlDB     *sql.DB
+	App   *fiber.App
+	pool  *pgxpool.Pool
+	sqlDB *sql.DB
+	audit interface {
+		Close(context.Context) error
+	}
 	closeOnce sync.Once
 }
 
@@ -73,6 +77,7 @@ func New(ctx context.Context, cfg *config.AppConfig) (*Server, error) {
 	vectorAdapter := vector.NewPgvectorAdapter(pool)
 	sessionAdapter := session.NewPostgresAdapter(pool, cfg.SessionExpiry)
 	auditAdapter := auditInfra.NewPostgresAdapter(pool)
+	asyncAuditAdapter := auditInfra.NewAsyncAdapter(auditAdapter, cfg.AuditWorkers, cfg.AuditQueueSize, cfg.AuditTimeout)
 
 	ragEngine := rag.New(embedderAdapter, vectorAdapter)
 	orch := orchestrator.New(llmAdapter, ragEngine, sessionAdapter, cfg.SystemPrompt)
@@ -84,7 +89,7 @@ func New(ctx context.Context, cfg *config.AppConfig) (*Server, error) {
 		Config:        cfg,
 		JWTManager:    jwtManager,
 		SessionStore:  sessionAdapter,
-		AuditStore:    auditAdapter,
+		AuditStore:    asyncAuditAdapter,
 		AuthHandler:   handlers.NewAuthHandler(ldapAdapter, jwtManager),
 		HealthHandler: handlers.NewHealthHandlerWithTimeout(orch, vectorAdapter, cfg.HealthTimeout),
 		ChatHandler:   handlers.NewChatHandlerWithTimeout(orch, cfg.ChatTimeout, cfg.LLMModel, cfg.LLMBackend),
@@ -101,11 +106,22 @@ func New(ctx context.Context, cfg *config.AppConfig) (*Server, error) {
 		AuditHandler:    handlers.NewAuditHandler(auditAdapter),
 	})
 
-	return &Server{App: fiberApp, pool: pool, sqlDB: sqlDB}, nil
+	return &Server{App: fiberApp, pool: pool, sqlDB: sqlDB, audit: asyncAuditAdapter}, nil
 }
 
 func (s *Server) Close() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	s.close(ctx)
+}
+
+func (s *Server) close(ctx context.Context) {
 	s.closeOnce.Do(func() {
+		if s.audit != nil {
+			if err := s.audit.Close(ctx); err != nil {
+				slog.Error("close audit worker pool failed", "error", err)
+			}
+		}
 		if s.sqlDB != nil {
 			s.sqlDB.Close()
 		}
@@ -122,7 +138,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 
 	err := s.App.ShutdownWithContext(ctx)
-	s.Close()
+	s.close(ctx)
 	if errors.Is(err, fiber.ErrNotRunning) {
 		return nil
 	}

@@ -70,3 +70,18 @@ func TestRecoveryMiddleware_ReturnsServerError(t *testing.T) {
 		t.Fatalf("expected %s response header", RequestIDHeader)
 	}
 }
+
+func TestRedactLogValue(t *testing.T) {
+	for _, input := range []string{
+		"Authorization: Bearer abc",
+		"password is secret",
+		"jwt token invalid",
+	} {
+		if got := RedactLogValue(input); got != "[redacted]" {
+			t.Fatalf("expected redacted value for %q, got %q", input, got)
+		}
+	}
+	if got := RedactLogValue("ordinary error"); got != "ordinary error" {
+		t.Fatalf("expected ordinary value to pass through, got %q", got)
+	}
+}

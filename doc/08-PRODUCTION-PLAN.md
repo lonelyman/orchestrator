@@ -53,7 +53,7 @@ Sprint 7 — Scale Prep (Phase 2)       🟢 vLLM migration ready
 - Endpoint `POST /auth/logout` → revoke jti
 - (Optional) Refresh token rotation flow
 
-#### 1.3 Security headers + CORS
+#### 1.3 Security headers + CORS ✅
 - เพิ่ม `fiber/middleware/helmet` (HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy)
 - CORS policy: env `ALLOWED_ORIGINS` (default deny)
 - CSP header สำหรับ WebUI
@@ -75,7 +75,7 @@ Sprint 7 — Scale Prep (Phase 2)       🟢 vLLM migration ready
 ### Deliverables
 - [ ] PR #1: LDAP TLS
 - [ ] PR #2: JWT v2 (audience, jti, revocation)
-- [ ] PR #3: Security headers + CORS
+- [x] PR #3: Security headers + CORS
 - [ ] PR #4: Login rate limit + lockout
 - [ ] PR #5: SSRF guard
 - [ ] PR #6: Secrets management doc
@@ -93,7 +93,7 @@ Sprint 7 — Scale Prep (Phase 2)       🟢 vLLM migration ready
 
 ### Tasks
 
-#### 2.1 Audit worker pool
+#### 2.1 Audit worker pool ✅
 - แทน `go func()` ด้วย channel-based worker (4 workers, queue 1000)
 - Drop policy: log warning + counter เมื่อ queue เต็ม
 - Drain ตอน shutdown (timeout 10s)
@@ -134,7 +134,7 @@ Sprint 7 — Scale Prep (Phase 2)       🟢 vLLM migration ready
 - `/health` — full dependency status (สำหรับ monitor, ไม่ใช่ probe) ✅
 
 ### Deliverables
-- [ ] PR #7: Audit worker pool
+- [x] PR #7: Audit worker pool
 - [x] PR #8: Message atomicity
 - [x] PR #9: Graceful shutdown v2
 - [x] PR #10: Streaming context

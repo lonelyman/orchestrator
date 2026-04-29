@@ -18,6 +18,7 @@ func SessionMiddleware(sessionPort ports.SessionPort) fiber.Handler {
 
 		ctx := c.Context()
 		sessionID := c.Get("X-Session-ID")
+		requestID, _ := c.Locals(RequestIDKey).(string)
 
 		var session *models.Session
 		var err error
@@ -26,10 +27,11 @@ func SessionMiddleware(sessionPort ports.SessionPort) fiber.Handler {
 		if sessionID != "" {
 			session, err = sessionPort.GetSession(ctx, sessionID)
 			if err != nil {
-				slog.Warn("session not found, creating new", "session_id", sessionID)
+				slog.Warn("session not found, creating new", "request_id", requestID, "session_id", sessionID)
 				session = nil
 			} else if session.UserID != claims.UserID {
 				slog.Warn("session owner mismatch, creating new",
+					"request_id", requestID,
 					"session_id", sessionID,
 					"session_user_id", session.UserID,
 					"claims_user_id", claims.UserID,
@@ -42,10 +44,10 @@ func SessionMiddleware(sessionPort ports.SessionPort) fiber.Handler {
 		if session == nil {
 			session, err = sessionPort.CreateSession(ctx, claims.UserID)
 			if err != nil {
-				slog.Error("create session failed", "error", err)
+				slog.Error("create session failed", "request_id", requestID, "error", err)
 				return c.Next()
 			}
-			slog.Info("session created", "session_id", session.ID, "user_id", claims.UserID)
+			slog.Info("session created", "request_id", requestID, "session_id", session.ID, "user_id", claims.UserID)
 		}
 
 		// เก็บ Session ไว้ใน context

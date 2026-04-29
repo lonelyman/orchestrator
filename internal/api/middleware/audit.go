@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"log/slog"
 	"strings"
 	"time"
@@ -13,11 +12,6 @@ import (
 
 // AuditMiddleware บันทึกทุก request อัตโนมัติ
 func AuditMiddleware(auditPort ports.AuditPort, timeout ...time.Duration) fiber.Handler {
-	saveTimeout := 5 * time.Second
-	if len(timeout) > 0 && timeout[0] > 0 {
-		saveTimeout = timeout[0]
-	}
-
 	return func(c fiber.Ctx) error {
 		start := time.Now()
 
@@ -63,15 +57,13 @@ func AuditMiddleware(auditPort ports.AuditPort, timeout ...time.Duration) fiber.
 			IPAddress:       c.IP(),
 		}
 
-		// บันทึกแบบ async
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), saveTimeout)
-			defer cancel()
-
-			if saveErr := auditPort.Save(ctx, log); saveErr != nil {
-				slog.Error("save audit log failed", "error", saveErr)
-			}
-		}()
+		if saveErr := auditPort.Save(c.Context(), log); saveErr != nil {
+			slog.Error("enqueue audit log failed",
+				"error", saveErr,
+				"request_id", log.RequestID,
+				"path", log.Path,
+			)
+		}
 
 		return err
 	}
