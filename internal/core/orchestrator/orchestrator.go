@@ -136,3 +136,9 @@ func (o *Orchestrator) ChatStream(ctx context.Context, req models.ChatRequest, o
 func (o *Orchestrator) HealthCheck(ctx context.Context) error {
 	return o.llm.HealthCheck(ctx)
 }
+
+// EmbedderCheck ตรวจสอบว่า Embedder พร้อมใช้งาน
+func (o *Orchestrator) EmbedderCheck(ctx context.Context) error {
+	_, err := o.rag.Embedder().Embed(ctx, "test")
+	return err
+}

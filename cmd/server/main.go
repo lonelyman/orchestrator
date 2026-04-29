@@ -59,7 +59,7 @@ func main() {
 	orch := orchestrator.New(ollamaAdapter, ragEngine, cfg.SystemPrompt)
 
 	// สร้าง Handlers
-	healthHandler := handlers.NewHealthHandler(orch)
+	healthHandler := handlers.NewHealthHandler(orch, pgvectorAdapter)
 	chatHandler := handlers.NewChatHandler(orch)
 	ragHandler := handlers.NewRAGHandler(ragEngine)
 

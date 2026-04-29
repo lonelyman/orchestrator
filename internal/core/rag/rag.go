@@ -82,3 +82,8 @@ func (r *RAGEngine) BuildContext(docs []models.Document) string {
 
 	return sb.String()
 }
+
+// Embedder คืน EmbedderPort
+func (r *RAGEngine) Embedder() ports.EmbedderPort {
+	return r.embedder
+}

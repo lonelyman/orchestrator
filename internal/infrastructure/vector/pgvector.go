@@ -135,3 +135,8 @@ func (p *PgvectorAdapter) Delete(ctx context.Context, id string) error {
 	_, err := p.pool.Exec(ctx, `DELETE FROM documents WHERE id = $1`, id)
 	return err
 }
+
+// Ping ตรวจสอบการเชื่อมต่อ PostgreSQL
+func (p *PgvectorAdapter) Ping(ctx context.Context) error {
+	return p.pool.Ping(ctx)
+}

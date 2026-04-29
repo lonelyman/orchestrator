@@ -514,3 +514,51 @@ iMac M1 16GB รับได้ไหม?
 - [ ] Rate limiting per user
 - [ ] Queue system ถ้า request เยอะ
 - [ ] Horizontal scaling plan
+
+---
+
+## 13. Session Log — 2026-04-29
+
+### สิ่งที่ทำสำเร็จ
+
+#### Streaming Support ✅
+- เพิ่ม Stream mode ใน `/v1/chat/completions`
+- แก้ context canceled bug ใน Fiber SendStreamWriter
+- WebUI เห็นตัวอักษรทยอยออกมา real-time
+
+#### WebUI Integration ✅
+- เพิ่ม `/v1/models` endpoint (OpenAI-compatible)
+- เชื่อม Open WebUI → Go Orchestrator (port 50000)
+- WebUI → Intent Router → RAG → Stream → คำตอบ ✅
+- แก้ WebUI chat_history format parsing
+
+#### RAG + Stream ✅
+- ChatStream ใช้ RAG context เหมือน Chat
+- Intent Classification ทำงานใน Stream mode
+- ทดสอบ: "นโยบาย OT?" → RAG docs=3 → ตอบจากเอกสารจริง ✅
+
+#### SSH Key บน iMac ✅
+- สร้าง ed25519 key
+- เพิ่มใน GitHub
+- push ผ่าน SSH ได้แล้ว
+
+### API Route ทั้งหมดตอนนี้
+
+| Method | Endpoint | Format | หน้าที่ |
+|---|---|---|---|
+| GET | /health | Standard | ตรวจสถานะ |
+| GET | /v1/models | OpenAI | Model list สำหรับ WebUI |
+| POST | /v1/chat/completions | OpenAI | Chat + Stream |
+| POST | /v1/rag/ingest | Standard | Upload text |
+| POST | /v1/rag/upload | Standard | Upload file (PDF/TXT) |
+
+### TODO ที่ยังค้างอยู่ (Phase 3.5)
+
+- [ ] Session Management — จำประวัติการสนทนา
+- [ ] Authentication — JWT / API Key
+- [ ] Graceful Shutdown
+- [ ] Structured Logging (slog)
+- [ ] Health Check ครบทุก dependency
+- [ ] Config Validation (Fail-fast)
+- [ ] Audit Log
+- [ ] Document Management UI
