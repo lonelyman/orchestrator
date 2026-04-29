@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 )
 
@@ -48,7 +48,7 @@ func (n *NomicAdapter) Embed(ctx context.Context, text string) ([]float32, error
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	log.Printf("Embed request: model=%s, text=%s, url=%s", n.model, text, n.baseURL+"/api/embeddings")
+	slog.Info("embed request", "model", n.model, "text", text, "url", n.baseURL+"/api/embeddings")
 
 	req, err := http.NewRequestWithContext(ctx, "POST", n.baseURL+"/api/embeddings", bytes.NewBuffer(body))
 	if err != nil {
@@ -67,7 +67,7 @@ func (n *NomicAdapter) Embed(ctx context.Context, text string) ([]float32, error
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
-	log.Printf("Embed response: embedding_len=%d", len(embedResp.Embedding))
+	slog.Info("embed response", "embedding_len", len(embedResp.Embedding))
 
 	if len(embedResp.Embedding) == 0 {
 		return nil, fmt.Errorf("empty embedding returned")

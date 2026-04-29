@@ -3,7 +3,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/enterprise-ai/orchestrator/internal/core/intent"
@@ -48,8 +48,8 @@ func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string
 		lines := strings.Split(lastMsg, "\n")
 		for i := len(lines) - 1; i >= 0; i-- {
 			line := strings.TrimSpace(lines[i])
-			if strings.HasPrefix(line, "USER:") {
-				lastMsg = strings.TrimSpace(strings.TrimPrefix(line, "USER:"))
+			if after, ok := strings.CutPrefix(line, "USER:"); ok {
+				lastMsg = strings.TrimSpace(after)
 				break
 			}
 		}
@@ -57,8 +57,7 @@ func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string
 
 	// Phase 3: Intent Classification
 	intentResult := o.classifier.Classify(lastMsg)
-	log.Printf("Intent: query=%s, intent=%s, confidence=%.2f, reason=%s",
-		lastMsg, intentResult.Intent, intentResult.Confidence, intentResult.Reason)
+	slog.Info("intent", "query", lastMsg, "intent", intentResult.Intent, "confidence", intentResult.Confidence, "reason", intentResult.Reason)
 
 	systemContent := o.systemPrompt
 
@@ -66,7 +65,7 @@ func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string
 	case models.IntentRAG:
 		// ค้นหาจาก Vector DB
 		docs, err := o.rag.Search(ctx, lastMsg, 3)
-		log.Printf("RAG Search: docs=%d, err=%v", len(docs), err)
+		slog.Info("rag search", "docs", len(docs), "err", err)
 		if err == nil && len(docs) > 0 {
 			ragContext := o.rag.BuildContext(docs)
 			systemContent = systemContent + "\n\nUse the following information to answer the question:\n\n" + ragContext
@@ -74,11 +73,11 @@ func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string
 
 	case models.IntentMCP:
 		// TODO: Phase 2 MCP — เมื่อมี SQL Server จริง
-		log.Printf("MCP Intent detected — MCP not connected yet, falling back to Direct")
+		slog.Info("mcp intent detected, falling back to direct")
 
 	case models.IntentDirect:
 		// ตอบตรงๆ ไม่ต้องค้นหาอะไร
-		log.Printf("Direct Intent — answering without RAG/MCP")
+		slog.Info("direct intent")
 	}
 
 	// รวม system prompt + messages
@@ -96,7 +95,7 @@ func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string
 
 // ChatStream รับ request และ stream คำตอบกลับทีละ chunk
 func (o *Orchestrator) ChatStream(ctx context.Context, req models.ChatRequest, onChunk func(string)) error {
-	log.Printf("ChatStream called: messages=%d", len(req.Messages))
+	slog.Info("chatstream called", "messages", len(req.Messages))
 
 	if len(req.Messages) == 0 {
 		return fmt.Errorf("messages is required")
@@ -107,7 +106,7 @@ func (o *Orchestrator) ChatStream(ctx context.Context, req models.ChatRequest, o
 
 	// Intent Classification
 	intentResult := o.classifier.Classify(lastMsg)
-	log.Printf("ChatStream Intent: intent=%s", intentResult.Intent)
+	slog.Info("chatstream intent", "intent", intentResult.Intent)
 
 	systemContent := o.systemPrompt
 
@@ -125,10 +124,10 @@ func (o *Orchestrator) ChatStream(ctx context.Context, req models.ChatRequest, o
 	}, req.Messages...)
 
 	err := o.llm.ChatStream(ctx, messages, func(chunk string) {
-		log.Printf("Chunk received: %q", chunk)
+		slog.Debug("chunk received", "chunk", chunk)
 		onChunk(chunk)
 	})
-	log.Printf("ChatStream done: err=%v", err)
+	slog.Info("chatstream done", "err", err)
 	return err
 }
 

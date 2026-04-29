@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -23,8 +23,15 @@ import (
 )
 
 func main() {
+	// ตั้งค่า Structured Logger
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
 	// โหลด config
 	cfg := config.Load()
+	slog.Info("config loaded", "port", cfg.APIPort, "model", cfg.LLMModel, "embed", cfg.EmbedModel)
 
 	// เชื่อมต่อ PostgreSQL
 	dbURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
@@ -32,7 +39,8 @@ func main() {
 
 	poolConfig, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
-		log.Fatalf("parse db config: %v", err)
+		slog.Error("parse db config", "error", err)
+		os.Exit(1)
 	}
 
 	poolConfig.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
@@ -41,10 +49,11 @@ func main() {
 
 	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
 	if err != nil {
-		log.Fatalf("connect postgres: %v", err)
+		slog.Error("connect postgres", "error", err)
+		os.Exit(1)
 	}
 	defer pool.Close()
-	log.Println("✅ PostgreSQL connected")
+	slog.Info("postgresql connected")
 
 	// สร้าง Adapters
 	ollamaURL := fmt.Sprintf("http://%s:%s", cfg.LLMHost, cfg.LLMPort)
@@ -54,9 +63,10 @@ func main() {
 
 	// สร้าง Schema
 	if err := pgvectorAdapter.InitSchema(context.Background()); err != nil {
-		log.Fatalf("init schema: %v", err)
+		slog.Error("init schema", "error", err)
+		os.Exit(1)
 	}
-	log.Println("✅ pgvector schema ready")
+	slog.Info("pgvector schema ready")
 
 	// สร้าง Core
 	ragEngine := rag.New(nomicAdapter, pgvectorAdapter)
@@ -81,25 +91,20 @@ func main() {
 
 	// Graceful Shutdown
 	go func() {
-		log.Printf("🚀 Server starting on port %s", cfg.APIPort)
+		slog.Info("server starting", "port", cfg.APIPort)
 		if err := app.Listen(":" + cfg.APIPort); err != nil {
-			log.Printf("Server error: %v", err)
+			slog.Error("server error", "error", err)
 		}
 	}()
 
-	// รอ signal SIGINT (Ctrl+C) หรือ SIGTERM (Docker stop)
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
 
-	log.Println("⏳ Shutting down gracefully...")
-
-	// รอให้ request ที่กำลังทำอยู่เสร็จก่อน (timeout 10 วิ)
-	if err := app.ShutdownWithTimeout(25 * time.Second); err != nil {
-		log.Printf("Force shutdown: %v", err)
+	slog.Info("shutting down gracefully...")
+	if err := app.ShutdownWithTimeout(10 * time.Second); err != nil {
+		slog.Error("force shutdown", "error", err)
 	}
-
-	// ปิด PostgreSQL connection
 	pool.Close()
-	log.Println("✅ Server stopped cleanly")
+	slog.Info("server stopped cleanly")
 }

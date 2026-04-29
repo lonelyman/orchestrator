@@ -3,7 +3,7 @@ package vector
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/enterprise-ai/orchestrator/internal/domain/models"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -55,7 +55,7 @@ func (p *PgvectorAdapter) Store(ctx context.Context, doc models.Document) error 
 }
 
 func (p *PgvectorAdapter) Search(ctx context.Context, embedding []float32, limit int) ([]models.Document, error) {
-	log.Printf("Search called: embedding_len=%d, limit=%d", len(embedding), limit)
+	slog.Info("search called", "embedding_len", len(embedding), "limit", limit)
 
 	if len(embedding) == 0 {
 		return nil, fmt.Errorf("search: empty embedding")
@@ -73,7 +73,7 @@ func (p *PgvectorAdapter) Search(ctx context.Context, embedding []float32, limit
 
 	rows, err := p.pool.Query(ctx, query, pgvector.NewVector(embedding), limit)
 	if err != nil {
-		log.Printf("Search query error: %v", err)
+		slog.Error("search query error", "error", err)
 		return nil, fmt.Errorf("search: %w", err)
 	}
 	defer rows.Close()
@@ -96,11 +96,11 @@ func (p *PgvectorAdapter) Search(ctx context.Context, embedding []float32, limit
 			return nil, fmt.Errorf("search count embeddings: %w", err)
 		}
 		if docsWithEmbedding == 0 {
-			log.Printf("Search results: 0 docs, rows_err=<nil>")
+			slog.Info("search results", "docs", 0)
 			return results, nil
 		}
 
-		log.Printf("Search similarity returned 0 rows despite docs_with_embedding=%d, fallback to latest docs", docsWithEmbedding)
+		slog.Info("search similarity fallback", "docs_with_embedding", docsWithEmbedding)
 
 		fallbackQuery := `
 			SELECT id, content, source, created_at
@@ -127,7 +127,7 @@ func (p *PgvectorAdapter) Search(ctx context.Context, embedding []float32, limit
 		}
 	}
 
-	log.Printf("Search results: %d docs, rows_err=%v", len(results), rows.Err())
+	slog.Info("search results", "docs", len(results), "rows_err", rows.Err())
 	return results, nil
 }
 

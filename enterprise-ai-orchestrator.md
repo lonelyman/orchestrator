@@ -562,3 +562,35 @@ iMac M1 16GB รับได้ไหม?
 - [ ] Config Validation (Fail-fast)
 - [ ] Audit Log
 - [ ] Document Management UI
+
+---
+
+## 14. Session Log — 2026-04-29 ( afternoon)
+
+### สิ่งที่ทำสำเร็จ
+
+#### Health Check ครบทุก Dependency ✅
+- เพิ่ม Ping() ใน PgvectorAdapter
+- เพิ่ม EmbedderCheck() ใน Orchestrator
+- Response: `{"db":"healthy","embedder":"healthy","llm":"healthy","status":"healthy"}`
+
+#### Upgrade Embedding Model ✅
+- เปลี่ยนจาก nomic-embed-text → nomic-embed-text-v2-moe
+- dimensions ยังเป็น 768 เท่าเดิม ไม่ต้องแก้ schema
+- EmbedModel อ่านจาก .env ได้แล้ว (configurable)
+- ลด ChunkSize: 500 → 200 เพราะ v2-moe context limit = 512 tokens
+- Clean whitespace ใน Ingest ก่อน embed
+
+#### Graceful Shutdown ✅
+- รับ SIGINT (Ctrl+C) และ SIGTERM (docker stop)
+- รอ request ที่กำลังทำอยู่เสร็จก่อน (timeout 10 วิ)
+- ปิด PostgreSQL pool อย่างถูกต้อง
+
+### TODO ที่ยังค้างอยู่ (Phase 3.5)
+
+- [ ] Structured Logging (slog)
+- [ ] Session Management
+- [ ] Authentication (JWT / API Key)
+- [ ] Audit Log
+- [ ] Document Management (list/delete)
+- [ ] Rate Limiting
