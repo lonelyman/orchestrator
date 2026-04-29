@@ -35,9 +35,9 @@ func New(llm ports.LLMPort, rag *rag.RAGEngine, session ports.SessionPort, syste
 	}
 }
 
-func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string, error) {
+func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string, models.Intent, error) {
 	if len(req.Messages) == 0 {
-		return "", fmt.Errorf("messages is required")
+		return "", models.IntentDirect, fmt.Errorf("messages is required")
 	}
 
 	lastMsg := req.Messages[len(req.Messages)-1].Content
@@ -88,7 +88,7 @@ func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string
 
 	result, err := o.llm.Chat(ctx, messages)
 	if err != nil {
-		return "", fmt.Errorf("llm chat: %w", err)
+		return "", intentResult.Intent, fmt.Errorf("llm chat: %w", err)
 	}
 
 	// บันทึก messages ลง DB
@@ -108,14 +108,14 @@ func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string
 		go o.session.SaveMessage(context.Background(), assistantMsg)
 	}
 
-	return result, nil
+	return result, intentResult.Intent, nil
 }
 
-func (o *Orchestrator) ChatStream(ctx context.Context, req models.ChatRequest, onChunk func(string)) error {
+func (o *Orchestrator) ChatStream(ctx context.Context, req models.ChatRequest, onChunk func(string)) (models.Intent, error) {
 	slog.Info("chat stream started", "messages", len(req.Messages))
 
 	if len(req.Messages) == 0 {
-		return fmt.Errorf("messages is required")
+		return models.IntentDirect, fmt.Errorf("messages is required")
 	}
 
 	lastMsg := req.Messages[len(req.Messages)-1].Content
@@ -177,7 +177,7 @@ func (o *Orchestrator) ChatStream(ctx context.Context, req models.ChatRequest, o
 	}
 
 	slog.Info("chat stream done", "error", err)
-	return err
+	return intentResult.Intent, err
 }
 
 func (o *Orchestrator) HealthCheck(ctx context.Context) error {

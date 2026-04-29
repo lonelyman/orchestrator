@@ -14,6 +14,7 @@ import (
 	"github.com/enterprise-ai/orchestrator/internal/api/middleware"
 	"github.com/enterprise-ai/orchestrator/internal/core/orchestrator"
 	"github.com/enterprise-ai/orchestrator/internal/core/rag"
+	auditInfra "github.com/enterprise-ai/orchestrator/internal/infrastructure/audit"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/auth"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/embedder"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/llm"
@@ -67,6 +68,10 @@ func main() {
 	// สร้าง Session Adapter
 	sessionAdapter := session.NewPostgresAdapter(pool, 30*time.Minute)
 
+	// สร้าง Audit Adapter
+	auditAdapter := auditInfra.NewPostgresAdapter(pool)
+	auditHandler := handlers.NewAuditHandler(auditAdapter)
+
 	// สร้าง Schema
 	if err := pgvectorAdapter.InitSchema(context.Background()); err != nil {
 		slog.Error("init schema", "error", err)
@@ -98,20 +103,17 @@ func main() {
 	app.Get("/health", healthHandler.Check)
 	app.Get("/v1/models", chatHandler.Models)
 
-	// Protected routes (ต้อง login)
 	protected := app.Group("/", middleware.JWTMiddleware(jwtManager))
 	protected.Use(middleware.SessionMiddleware(sessionAdapter))
+	protected.Use(middleware.AuditMiddleware(auditAdapter))
 	protected.Get("/auth/me", authHandler.Me)
 	protected.Post("/v1/chat/completions", chatHandler.Completions)
 	protected.Post("/v1/rag/ingest", ragHandler.Ingest)
 	protected.Post("/v1/rag/upload", ragHandler.Upload)
 
-	// Routes
-	app.Get("/health", healthHandler.Check)
-	app.Get("/v1/models", chatHandler.Models)
-	app.Post("/v1/chat/completions", chatHandler.Completions)
-	app.Post("/v1/rag/ingest", ragHandler.Ingest)
-	app.Post("/v1/rag/upload", ragHandler.Upload)
+	// Admin routes
+	admin := app.Group("/v1/admin", middleware.JWTMiddleware(jwtManager))
+	admin.Get("/logs", auditHandler.List)
 
 	// Graceful Shutdown
 	go func() {

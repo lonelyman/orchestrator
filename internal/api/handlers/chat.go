@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/enterprise-ai/orchestrator/internal/api/middleware"
 	"github.com/enterprise-ai/orchestrator/internal/core/orchestrator"
 	"github.com/enterprise-ai/orchestrator/internal/domain/models"
 	"github.com/gofiber/fiber/v3"
@@ -19,20 +21,35 @@ func NewChatHandler(orch *orchestrator.Orchestrator) *ChatHandler {
 	return &ChatHandler{orch: orch}
 }
 
+func (h *ChatHandler) Models(c fiber.Ctx) error {
+	return c.JSON(fiber.Map{
+		"object": "list",
+		"data": []fiber.Map{
+			{
+				"id":       "qwen2.5:7b",
+				"object":   "model",
+				"owned_by": "ollama",
+			},
+		},
+	})
+}
+
 func (h *ChatHandler) Completions(c fiber.Ctx) error {
 	var req models.ChatRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return Fail(c, 400, "invalid request", "BAD_REQUEST")
 	}
 
+	// บันทึก query สำหรับ Audit Log
+	if len(req.Messages) > 0 {
+		lastMsg := req.Messages[len(req.Messages)-1].Content
+		middleware.SetAuditQuery(c, lastMsg)
+	}
+
 	// ดึง session_id จาก middleware
 	sessionID, _ := c.Locals("session_id").(string)
 
-	// ใส่ session_id เข้า context
-	ctx := context.WithValue(context.Background(), "session_id", sessionID)
-	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
-	defer cancel()
-
+	// Stream mode
 	if req.Stream {
 		c.Set("Content-Type", "text/event-stream")
 		c.Set("Cache-Control", "no-cache")
@@ -41,24 +58,38 @@ func (h *ChatHandler) Completions(c fiber.Ctx) error {
 		streamCtx := context.WithValue(context.Background(), "session_id", sessionID)
 		streamCtx, streamCancel := context.WithTimeout(streamCtx, 120*time.Second)
 
+		// Collect full response สำหรับ Audit Log
+		var fullResponse strings.Builder
+
 		return c.SendStreamWriter(func(w *bufio.Writer) {
 			defer streamCancel()
-			h.orch.ChatStream(streamCtx, req, func(chunk string) {
+			intentType, _ := h.orch.ChatStream(streamCtx, req, func(chunk string) {
+				fullResponse.WriteString(chunk)
 				id := fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano())
 				data := fmt.Sprintf(`{"id":"%s","object":"chat.completion.chunk","model":"%s","choices":[{"delta":{"content":%q},"index":0}]}`,
 					id, req.Model, chunk)
 				fmt.Fprintf(w, "data: %s\n\n", data)
 				w.Flush()
 			})
+			middleware.SetAuditIntent(c, string(intentType))
+			middleware.SetAuditResponse(c, fullResponse.String())
 			fmt.Fprintf(w, "data: [DONE]\n\n")
 			w.Flush()
 		})
 	}
 
-	result, err := h.orch.Chat(ctx, req)
+	// Non-stream mode
+	ctx := context.WithValue(context.Background(), "session_id", sessionID)
+	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
+	defer cancel()
+
+	result, intentType, err := h.orch.Chat(ctx, req)
 	if err != nil {
 		return Fail(c, 500, err.Error(), "LLM_ERROR")
 	}
+
+	middleware.SetAuditIntent(c, string(intentType))
+	middleware.SetAuditResponse(c, result)
 
 	return c.JSON(models.ChatResponse{
 		ID:      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
@@ -70,19 +101,6 @@ func (h *ChatHandler) Completions(c fiber.Ctx) error {
 				Index:        0,
 				Message:      models.ChatMessage{Role: "assistant", Content: result},
 				FinishReason: "stop",
-			},
-		},
-	})
-}
-
-func (h *ChatHandler) Models(c fiber.Ctx) error {
-	return c.JSON(fiber.Map{
-		"object": "list",
-		"data": []fiber.Map{
-			{
-				"id":       "qwen2.5:7b",
-				"object":   "model",
-				"owned_by": "ollama",
 			},
 		},
 	})
