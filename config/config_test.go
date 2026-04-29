@@ -18,6 +18,7 @@ var configEnvKeys = []string{
 	"RAG_INGEST_TIMEOUT",
 	"AUDIT_TIMEOUT",
 	"HEALTH_TIMEOUT",
+	"SHUTDOWN_TIMEOUT",
 	"MIGRATION_TIMEOUT",
 	"MAX_UPLOAD_MB",
 	"LLM_BACKEND",
@@ -40,6 +41,11 @@ var configEnvKeys = []string{
 	"DB_NAME",
 	"DB_USER",
 	"DB_PASS",
+	"DB_POOL_MAX_CONNS",
+	"DB_POOL_MIN_CONNS",
+	"DB_POOL_MAX_CONN_LIFETIME",
+	"DB_POOL_MAX_CONN_IDLE_TIME",
+	"DB_POOL_HEALTH_CHECK_PERIOD",
 	"AD_SERVER",
 	"AD_PORT",
 	"AD_BASE_DN",
@@ -81,8 +87,23 @@ func TestLoad_AllowsDevDefaults(t *testing.T) {
 	if cfg.ChatTimeout != 120*time.Second {
 		t.Fatalf("expected default chat timeout 120s, got %s", cfg.ChatTimeout)
 	}
+	if cfg.ShutdownTimeout != 10*time.Second {
+		t.Fatalf("expected default shutdown timeout 10s, got %s", cfg.ShutdownTimeout)
+	}
 	if cfg.MaxUploadMegabyte != 10 || cfg.MaxUploadBytes != 10<<20 {
 		t.Fatalf("expected default upload 10MB, got %d MB / %d bytes", cfg.MaxUploadMegabyte, cfg.MaxUploadBytes)
+	}
+	if cfg.DBPoolMaxConns != 20 || cfg.DBPoolMinConns != 2 {
+		t.Fatalf("expected default DB pool size 2-20, got %d-%d", cfg.DBPoolMinConns, cfg.DBPoolMaxConns)
+	}
+	if cfg.DBPoolMaxConnLifetime != 30*time.Minute {
+		t.Fatalf("expected default DB conn lifetime 30m, got %s", cfg.DBPoolMaxConnLifetime)
+	}
+	if cfg.DBPoolMaxConnIdleTime != 5*time.Minute {
+		t.Fatalf("expected default DB conn idle time 5m, got %s", cfg.DBPoolMaxConnIdleTime)
+	}
+	if cfg.DBPoolHealthCheckPeriod != time.Minute {
+		t.Fatalf("expected default DB health check period 1m, got %s", cfg.DBPoolHealthCheckPeriod)
 	}
 	if cfg.EmbedHost != cfg.LLMHost || cfg.EmbedPort != cfg.LLMPort {
 		t.Fatalf("expected embed endpoint to default to llm endpoint, got %s:%s vs %s:%s", cfg.EmbedHost, cfg.EmbedPort, cfg.LLMHost, cfg.LLMPort)
@@ -123,6 +144,21 @@ func TestLoad_RejectsInvalidOperationalLimit(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "RATE_LIMIT_PER_MINUTE") {
 		t.Fatalf("expected RATE_LIMIT_PER_MINUTE error, got %v", err)
+	}
+}
+
+func TestLoad_RejectsInvalidDBPoolSize(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("DEV_MODE", "true")
+	t.Setenv("DB_POOL_MAX_CONNS", "2")
+	t.Setenv("DB_POOL_MIN_CONNS", "3")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(err.Error(), "DB_POOL_MIN_CONNS") {
+		t.Fatalf("expected DB_POOL_MIN_CONNS error, got %v", err)
 	}
 }
 
@@ -180,7 +216,13 @@ func TestLoad_AcceptsProductionConfig(t *testing.T) {
 	t.Setenv("JWT_EXPIRY", "30m")
 	t.Setenv("SESSION_EXPIRY", "45m")
 	t.Setenv("CHAT_TIMEOUT", "90s")
+	t.Setenv("SHUTDOWN_TIMEOUT", "15s")
 	t.Setenv("MAX_UPLOAD_MB", "25")
+	t.Setenv("DB_POOL_MAX_CONNS", "50")
+	t.Setenv("DB_POOL_MIN_CONNS", "5")
+	t.Setenv("DB_POOL_MAX_CONN_LIFETIME", "45m")
+	t.Setenv("DB_POOL_MAX_CONN_IDLE_TIME", "10m")
+	t.Setenv("DB_POOL_HEALTH_CHECK_PERIOD", "30s")
 	t.Setenv("LLM_BACKEND", "vllm")
 	t.Setenv("LLM_API_KEY", "test-key")
 	t.Setenv("EMBED_HOST", "embed.example.com")
@@ -206,8 +248,20 @@ func TestLoad_AcceptsProductionConfig(t *testing.T) {
 	if cfg.ChatTimeout != 90*time.Second {
 		t.Fatalf("expected chat timeout 90s, got %s", cfg.ChatTimeout)
 	}
+	if cfg.ShutdownTimeout != 15*time.Second {
+		t.Fatalf("expected shutdown timeout 15s, got %s", cfg.ShutdownTimeout)
+	}
 	if cfg.MaxUploadBytes != 25<<20 {
 		t.Fatalf("expected max upload 25MB, got %d", cfg.MaxUploadBytes)
+	}
+	if cfg.DBPoolMaxConns != 50 || cfg.DBPoolMinConns != 5 {
+		t.Fatalf("unexpected DB pool size: min=%d max=%d", cfg.DBPoolMinConns, cfg.DBPoolMaxConns)
+	}
+	if cfg.DBPoolMaxConnLifetime != 45*time.Minute ||
+		cfg.DBPoolMaxConnIdleTime != 10*time.Minute ||
+		cfg.DBPoolHealthCheckPeriod != 30*time.Second {
+		t.Fatalf("unexpected DB pool durations: lifetime=%s idle=%s health=%s",
+			cfg.DBPoolMaxConnLifetime, cfg.DBPoolMaxConnIdleTime, cfg.DBPoolHealthCheckPeriod)
 	}
 	if cfg.LLMBackend != "vllm" || cfg.LLMAPIKey != "test-key" {
 		t.Fatalf("unexpected llm config: backend=%q key=%q", cfg.LLMBackend, cfg.LLMAPIKey)

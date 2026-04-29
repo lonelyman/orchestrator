@@ -102,7 +102,7 @@ Sprint 7 — Scale Prep (Phase 2)       🟢 vLLM migration ready
 - รวม user + assistant message ใน transaction เดียว ✅
 - ใส่ `sequence_number` คอลัมน์ + index `(session_id, sequence_number)` ✅
 
-#### 2.3 Graceful shutdown ที่จริง
+#### 2.3 Graceful shutdown ที่จริง ✅
 - `cmd/server/main.go` refactor:
   1. Receive signal
   2. Stop accept new connections
@@ -111,12 +111,13 @@ Sprint 7 — Scale Prep (Phase 2)       🟢 vLLM migration ready
   5. Cancel all goroutines via root context
   6. Close DB pool
 - `Listen` error → trigger shutdown channel
+- ใช้ `SHUTDOWN_TIMEOUT` สำหรับ drain HTTP request และปิด DB pool แบบ idempotent
 
 #### 2.4 Streaming context propagation
 - `chat.go` ใช้ `c.Context()` แทน `context.Background()` ✅
 - `parser.go` `ocrImageWithOllama` รับ `context.Context` parameter
 
-#### 2.5 DB pool tuning
+#### 2.5 DB pool tuning ✅
 - Override ใน `connectPostgres`:
   ```go
   poolConfig.MaxConns = 20
@@ -135,9 +136,9 @@ Sprint 7 — Scale Prep (Phase 2)       🟢 vLLM migration ready
 ### Deliverables
 - [ ] PR #7: Audit worker pool
 - [x] PR #8: Message atomicity
-- [ ] PR #9: Graceful shutdown v2
+- [x] PR #9: Graceful shutdown v2
 - [x] PR #10: Streaming context
-- [ ] PR #11: DB pool tuning
+- [x] PR #11: DB pool tuning
 - [x] PR #12: Health probe semantics
 
 ### Decision needed

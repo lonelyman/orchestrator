@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"github.com/enterprise-ai/orchestrator/config"
 	"github.com/enterprise-ai/orchestrator/internal/api"
@@ -28,9 +30,10 @@ import (
 )
 
 type Server struct {
-	App   *fiber.App
-	pool  *pgxpool.Pool
-	sqlDB *sql.DB
+	App       *fiber.App
+	pool      *pgxpool.Pool
+	sqlDB     *sql.DB
+	closeOnce sync.Once
 }
 
 func New(ctx context.Context, cfg *config.AppConfig) (*Server, error) {
@@ -102,12 +105,28 @@ func New(ctx context.Context, cfg *config.AppConfig) (*Server, error) {
 }
 
 func (s *Server) Close() {
-	if s.sqlDB != nil {
-		s.sqlDB.Close()
+	s.closeOnce.Do(func() {
+		if s.sqlDB != nil {
+			s.sqlDB.Close()
+		}
+		if s.pool != nil {
+			s.pool.Close()
+		}
+	})
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	if s.App == nil {
+		s.Close()
+		return nil
 	}
-	if s.pool != nil {
-		s.pool.Close()
+
+	err := s.App.ShutdownWithContext(ctx)
+	s.Close()
+	if errors.Is(err, fiber.ErrNotRunning) {
+		return nil
 	}
+	return err
 }
 
 func connectPostgres(ctx context.Context, cfg *config.AppConfig) (*pgxpool.Pool, error) {
@@ -122,6 +141,7 @@ func connectPostgres(ctx context.Context, cfg *config.AppConfig) (*pgxpool.Pool,
 	poolConfig.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 		return pgxvector.RegisterTypes(ctx, conn)
 	}
+	configurePostgresPool(poolConfig, cfg)
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
@@ -130,6 +150,14 @@ func connectPostgres(ctx context.Context, cfg *config.AppConfig) (*pgxpool.Pool,
 	slog.Info("postgresql connected")
 
 	return pool, nil
+}
+
+func configurePostgresPool(poolConfig *pgxpool.Config, cfg *config.AppConfig) {
+	poolConfig.MaxConns = int32(cfg.DBPoolMaxConns)
+	poolConfig.MinConns = int32(cfg.DBPoolMinConns)
+	poolConfig.MaxConnLifetime = cfg.DBPoolMaxConnLifetime
+	poolConfig.MaxConnIdleTime = cfg.DBPoolMaxConnIdleTime
+	poolConfig.HealthCheckPeriod = cfg.DBPoolHealthCheckPeriod
 }
 
 func buildLLMAdapter(cfg *config.AppConfig, baseURL string) (ports.LLMPort, error) {

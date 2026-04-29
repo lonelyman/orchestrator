@@ -19,9 +19,10 @@ const (
 // AppConfig เก็บ configuration ทั้งหมดของระบบ
 type AppConfig struct {
 	// Server
-	APIPort       string
-	BodyLimit     int
-	HealthTimeout time.Duration
+	APIPort         string
+	BodyLimit       int
+	HealthTimeout   time.Duration
+	ShutdownTimeout time.Duration
 
 	// LLM
 	LLMBackend string
@@ -36,11 +37,16 @@ type AppConfig struct {
 	EmbedPort  string
 
 	// Database
-	DBHost string
-	DBPort string
-	DBName string
-	DBUser string
-	DBPass string
+	DBHost                  string
+	DBPort                  string
+	DBName                  string
+	DBUser                  string
+	DBPass                  string
+	DBPoolMaxConns          int
+	DBPoolMinConns          int
+	DBPoolMaxConnLifetime   time.Duration
+	DBPoolMaxConnIdleTime   time.Duration
+	DBPoolHealthCheckPeriod time.Duration
 
 	// Active Directory
 	ADServer string
@@ -128,7 +134,31 @@ func Load() (*AppConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+	shutdownTimeout, err := parseDuration("SHUTDOWN_TIMEOUT", "10s")
+	if err != nil {
+		return nil, err
+	}
 	migrationTimeout, err := parseDuration("MIGRATION_TIMEOUT", "30s")
+	if err != nil {
+		return nil, err
+	}
+	dbPoolMaxConns, err := parsePositiveInt("DB_POOL_MAX_CONNS", "20")
+	if err != nil {
+		return nil, err
+	}
+	dbPoolMinConns, err := parsePositiveInt("DB_POOL_MIN_CONNS", "2")
+	if err != nil {
+		return nil, err
+	}
+	dbPoolMaxConnLifetime, err := parseDuration("DB_POOL_MAX_CONN_LIFETIME", "30m")
+	if err != nil {
+		return nil, err
+	}
+	dbPoolMaxConnIdleTime, err := parseDuration("DB_POOL_MAX_CONN_IDLE_TIME", "5m")
+	if err != nil {
+		return nil, err
+	}
+	dbPoolHealthCheckPeriod, err := parseDuration("DB_POOL_HEALTH_CHECK_PERIOD", "1m")
 	if err != nil {
 		return nil, err
 	}
@@ -155,36 +185,42 @@ func Load() (*AppConfig, error) {
 	}
 
 	cfg := &AppConfig{
-		DevMode:     devMode,
-		DevUsername: getEnv("DEV_USERNAME", "dev"),
-		DevPassword: getEnv("DEV_PASSWORD", "dev1234"),
-		APIPort:     getEnv("API_PORT", "50000"),
-		BodyLimit:   int(maxUploadBytes + (1 << 20)),
-		LLMBackend:  getEnv("LLM_BACKEND", "ollama"),
-		LLMHost:     getEnv("LLM_HOST", "localhost"),
-		LLMPort:     getEnv("LLM_PORT", "11434"),
-		LLMModel:    getEnv("LLM_MODEL", "qwen2.5:7b"),
-		LLMAPIKey:   getEnv("LLM_API_KEY", ""),
-		EmbedModel:  getEnv("EMBED_MODEL", "nomic-embed-text"),
-		EmbedHost:   getEnv("EMBED_HOST", getEnv("LLM_HOST", "localhost")),
-		EmbedPort:   getEnv("EMBED_PORT", getEnv("LLM_PORT", "11434")),
-		DBHost:      getEnv("DB_HOST", "localhost"),
-		DBPort:      getEnv("DB_PORT", "5432"),
-		DBName:      getEnv("DB_NAME", "orchestrator"),
-		DBUser:      getEnv("DB_USER", "orchestrator"),
-		DBPass:      getEnv("DB_PASS", defaultDBPass),
-		ADServer:    getEnv("AD_SERVER", "192.168.2.1"),
-		ADPort:      adPort,
-		ADBaseDN:    getEnv("AD_BASE_DN", "DC=nutritionprofess,DC=com"),
-		ADDomain:    getEnv("AD_DOMAIN", "nutritionprofess.com"),
-		JWTSecret:   getEnv("JWT_SECRET", defaultJWTSecret),
-		JWTExpiry:   jwtExpiry,
+		DevMode:                 devMode,
+		DevUsername:             getEnv("DEV_USERNAME", "dev"),
+		DevPassword:             getEnv("DEV_PASSWORD", "dev1234"),
+		APIPort:                 getEnv("API_PORT", "50000"),
+		BodyLimit:               int(maxUploadBytes + (1 << 20)),
+		LLMBackend:              getEnv("LLM_BACKEND", "ollama"),
+		LLMHost:                 getEnv("LLM_HOST", "localhost"),
+		LLMPort:                 getEnv("LLM_PORT", "11434"),
+		LLMModel:                getEnv("LLM_MODEL", "qwen2.5:7b"),
+		LLMAPIKey:               getEnv("LLM_API_KEY", ""),
+		EmbedModel:              getEnv("EMBED_MODEL", "nomic-embed-text"),
+		EmbedHost:               getEnv("EMBED_HOST", getEnv("LLM_HOST", "localhost")),
+		EmbedPort:               getEnv("EMBED_PORT", getEnv("LLM_PORT", "11434")),
+		DBHost:                  getEnv("DB_HOST", "localhost"),
+		DBPort:                  getEnv("DB_PORT", "5432"),
+		DBName:                  getEnv("DB_NAME", "orchestrator"),
+		DBUser:                  getEnv("DB_USER", "orchestrator"),
+		DBPass:                  getEnv("DB_PASS", defaultDBPass),
+		DBPoolMaxConns:          dbPoolMaxConns,
+		DBPoolMinConns:          dbPoolMinConns,
+		DBPoolMaxConnLifetime:   dbPoolMaxConnLifetime,
+		DBPoolMaxConnIdleTime:   dbPoolMaxConnIdleTime,
+		DBPoolHealthCheckPeriod: dbPoolHealthCheckPeriod,
+		ADServer:                getEnv("AD_SERVER", "192.168.2.1"),
+		ADPort:                  adPort,
+		ADBaseDN:                getEnv("AD_BASE_DN", "DC=nutritionprofess,DC=com"),
+		ADDomain:                getEnv("AD_DOMAIN", "nutritionprofess.com"),
+		JWTSecret:               getEnv("JWT_SECRET", defaultJWTSecret),
+		JWTExpiry:               jwtExpiry,
 		// Runtime Limits
 		SessionExpiry:     sessionExpiry,
 		ChatTimeout:       chatTimeout,
 		RAGIngestTimeout:  ragIngestTimeout,
 		AuditTimeout:      auditTimeout,
 		HealthTimeout:     healthTimeout,
+		ShutdownTimeout:   shutdownTimeout,
 		MigrationTimeout:  migrationTimeout,
 		RateLimitPerMin:   rateLimitPerMin,
 		MaxUploadBytes:    maxUploadBytes,
@@ -252,8 +288,29 @@ func (c *AppConfig) Validate() error {
 	if c.HealthTimeout <= 0 {
 		errs = append(errs, fmt.Errorf("HEALTH_TIMEOUT must be greater than zero"))
 	}
+	if c.ShutdownTimeout <= 0 {
+		errs = append(errs, fmt.Errorf("SHUTDOWN_TIMEOUT must be greater than zero"))
+	}
 	if c.MigrationTimeout <= 0 {
 		errs = append(errs, fmt.Errorf("MIGRATION_TIMEOUT must be greater than zero"))
+	}
+	if c.DBPoolMaxConns <= 0 {
+		errs = append(errs, fmt.Errorf("DB_POOL_MAX_CONNS must be greater than zero"))
+	}
+	if c.DBPoolMinConns <= 0 {
+		errs = append(errs, fmt.Errorf("DB_POOL_MIN_CONNS must be greater than zero"))
+	}
+	if c.DBPoolMinConns > c.DBPoolMaxConns {
+		errs = append(errs, fmt.Errorf("DB_POOL_MIN_CONNS must be less than or equal to DB_POOL_MAX_CONNS"))
+	}
+	if c.DBPoolMaxConnLifetime <= 0 {
+		errs = append(errs, fmt.Errorf("DB_POOL_MAX_CONN_LIFETIME must be greater than zero"))
+	}
+	if c.DBPoolMaxConnIdleTime <= 0 {
+		errs = append(errs, fmt.Errorf("DB_POOL_MAX_CONN_IDLE_TIME must be greater than zero"))
+	}
+	if c.DBPoolHealthCheckPeriod <= 0 {
+		errs = append(errs, fmt.Errorf("DB_POOL_HEALTH_CHECK_PERIOD must be greater than zero"))
 	}
 	if c.RateLimitPerMin <= 0 {
 		errs = append(errs, fmt.Errorf("RATE_LIMIT_PER_MINUTE must be greater than zero"))
