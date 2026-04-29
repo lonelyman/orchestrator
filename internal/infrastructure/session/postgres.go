@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/enterprise-ai/orchestrator/internal/domain/models"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -64,10 +65,14 @@ func (p *PostgresAdapter) GetSession(ctx context.Context, sessionID string) (*mo
 func (p *PostgresAdapter) GetHistory(ctx context.Context, sessionID string, limit int) ([]models.Message, error) {
 	query := `
 		SELECT id, session_id, role, content, metadata, created_at
-		FROM messages
-		WHERE session_id = $1
-		ORDER BY created_at ASC
-		LIMIT $2`
+		FROM (
+			SELECT id, session_id, role, content, metadata, created_at, sequence_number
+			FROM messages
+			WHERE session_id = $1
+			ORDER BY sequence_number DESC
+			LIMIT $2
+		) recent
+		ORDER BY sequence_number ASC`
 
 	rows, err := p.pool.Query(ctx, query, sessionID, limit)
 	if err != nil {
@@ -104,6 +109,35 @@ func (p *PostgresAdapter) SaveMessage(ctx context.Context, msg models.Message) e
 		return fmt.Errorf("save message: %w", err)
 	}
 
+	return nil
+}
+
+// SaveMessages บันทึก messages หลายรายการตามลำดับใน transaction เดียว
+func (p *PostgresAdapter) SaveMessages(ctx context.Context, messages []models.Message) error {
+	if len(messages) == 0 {
+		return nil
+	}
+
+	tx, err := p.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin save messages transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	query := `
+		INSERT INTO messages (session_id, role, content, metadata)
+		VALUES ($1, $2, $3, $4)`
+
+	for _, msg := range messages {
+		metadataBytes, _ := json.Marshal(msg.Metadata)
+		if _, err := tx.Exec(ctx, query, msg.SessionID, msg.Role, msg.Content, metadataBytes); err != nil {
+			return fmt.Errorf("save message: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit save messages transaction: %w", err)
+	}
 	return nil
 }
 

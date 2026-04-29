@@ -11,12 +11,13 @@ CREATE TABLE sessions (
 );
 
 CREATE TABLE messages (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    role       TEXT NOT NULL,
-    content    TEXT NOT NULL,
-    metadata   JSONB,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sequence_number BIGSERIAL NOT NULL,
+    session_id      UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    role            TEXT NOT NULL,
+    content         TEXT NOT NULL,
+    metadata        JSONB,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE audit_logs (
@@ -49,7 +50,7 @@ CREATE INDEX idx_sessions_user_expires
     ON sessions(user_id, expires_at DESC);
 
 CREATE INDEX idx_messages_session_created
-    ON messages(session_id, created_at ASC);
+    ON messages(session_id, sequence_number ASC);
 
 CREATE INDEX idx_audit_request_id
     ON audit_logs(request_id);

@@ -20,6 +20,9 @@ type SessionPort interface {
 	// SaveMessage บันทึก message ลง DB
 	SaveMessage(ctx context.Context, msg models.Message) error
 
+	// SaveMessages บันทึก messages หลายรายการตามลำดับใน transaction เดียว
+	SaveMessages(ctx context.Context, messages []models.Message) error
+
 	// ExpireSession ปิด Session
 	ExpireSession(ctx context.Context, sessionID string) error
 }

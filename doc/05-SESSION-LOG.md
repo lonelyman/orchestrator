@@ -68,11 +68,11 @@
 **Session Management:**
 - DB Schema: sessions + messages + indexes
 - SessionPort interface
-- PostgresAdapter: CreateSession, GetHistory, SaveMessage
+- PostgresAdapter: CreateSession, GetHistory, SaveMessage, SaveMessages
 - Session Middleware: auto-create/restore session
-- Sliding Window: 10 messages ล่าสุด
+- Sliding Window: 10 messages ล่าสุด เรียงด้วย `sequence_number`
 - metadata JSONB: เก็บ intent
-- Save messages async (goroutine)
+- Save user/assistant messages ใน transaction เดียว
 - X-Session-ID ใน response header
 - ทดสอบ: AI จำ context ข้าม request ได้ ✅
 

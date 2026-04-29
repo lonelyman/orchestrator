@@ -99,8 +99,8 @@ Sprint 7 — Scale Prep (Phase 2)       🟢 vLLM migration ready
 - Drain ตอน shutdown (timeout 10s)
 
 #### 2.2 SaveMessage atomicity
-- รวม user + assistant message ใน transaction เดียว
-- หรือใส่ `sequence_number` คอลัมน์ + index `(session_id, sequence_number)`
+- รวม user + assistant message ใน transaction เดียว ✅
+- ใส่ `sequence_number` คอลัมน์ + index `(session_id, sequence_number)` ✅
 
 #### 2.3 Graceful shutdown ที่จริง
 - `cmd/server/main.go` refactor:
@@ -113,7 +113,7 @@ Sprint 7 — Scale Prep (Phase 2)       🟢 vLLM migration ready
 - `Listen` error → trigger shutdown channel
 
 #### 2.4 Streaming context propagation
-- `chat.go` ใช้ `c.Context()` แทน `context.Background()`
+- `chat.go` ใช้ `c.Context()` แทน `context.Background()` ✅
 - `parser.go` `ocrImageWithOllama` รับ `context.Context` parameter
 
 #### 2.5 DB pool tuning
@@ -128,17 +128,17 @@ Sprint 7 — Scale Prep (Phase 2)       🟢 vLLM migration ready
 - ทำให้ override ผ่าน env ได้
 
 #### 2.6 Health probe split
-- `/live` — process alive only (ปัจจุบันถูก)
-- `/ready` — DB connectable เท่านั้น
-- `/health` — full dependency status (สำหรับ monitor, ไม่ใช่ probe)
+- `/live` — process alive only ✅
+- `/ready` — DB connectable เท่านั้น ✅
+- `/health` — full dependency status (สำหรับ monitor, ไม่ใช่ probe) ✅
 
 ### Deliverables
 - [ ] PR #7: Audit worker pool
-- [ ] PR #8: Message atomicity
+- [x] PR #8: Message atomicity
 - [ ] PR #9: Graceful shutdown v2
-- [ ] PR #10: Streaming context
+- [x] PR #10: Streaming context
 - [ ] PR #11: DB pool tuning
-- [ ] PR #12: Health probe semantics
+- [x] PR #12: Health probe semantics
 
 ### Decision needed
 - ❓ Audit log loss tolerance: drop หรือ block request เมื่อ queue เต็ม? (compliance impact)
@@ -293,8 +293,8 @@ Sprint 7 — Scale Prep (Phase 2)       🟢 vLLM migration ready
 - Bulk insert ใช้ `COPY`
 
 #### 6.4 Remove fallback DESC
-- `pgvector.go` ลบ fallback ที่คืน irrelevant docs
-- Return empty + ปรับ prompt ให้ LLM ตอบ "ไม่พบข้อมูลในเอกสาร"
+- `pgvector.go` ลบ fallback ที่คืน irrelevant docs ✅
+- Return empty + ปรับ prompt ให้ LLM ตอบ "ไม่พบข้อมูลในเอกสาร" ✅
 
 #### 6.5 Embedding cache
 - Hash content → cache ใน Redis/Postgres
@@ -308,7 +308,7 @@ Sprint 7 — Scale Prep (Phase 2)       🟢 vLLM migration ready
 - [x] PR #27: HNSW migration
 - [ ] PR #28: Hybrid search
 - [ ] PR #29: Batch embedding
-- [ ] PR #30: Fallback removal
+- [x] PR #30: Fallback removal
 - [ ] PR #31: Embedding cache
 - [ ] PR #32: Intent v2
 

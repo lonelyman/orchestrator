@@ -13,6 +13,7 @@ import (
 )
 
 const historyLimit = 10 // Sliding Window — ดึงแค่ 10 messages ล่าสุด
+const noRAGContextInstruction = "\n\nDocument search returned no relevant results. Tell the user in Thai that no information was found in uploaded documents, and do not guess from general knowledge."
 
 type Orchestrator struct {
 	llm          ports.LLMPort
@@ -74,6 +75,8 @@ func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string
 		if err == nil && len(docs) > 0 {
 			ragContext := o.rag.BuildContext(docs)
 			systemContent = systemContent + "\n\nUse the following information to answer:\n\n" + ragContext
+		} else {
+			systemContent += noRAGContextInstruction
 		}
 	case models.IntentMCP:
 		slog.Info("mcp intent - not connected yet")
@@ -104,8 +107,9 @@ func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string
 			Role:      "assistant",
 			Content:   result,
 		}
-		go o.session.SaveMessage(context.Background(), userMsg)
-		go o.session.SaveMessage(context.Background(), assistantMsg)
+		if err := o.session.SaveMessages(ctx, []models.Message{userMsg, assistantMsg}); err != nil {
+			slog.Error("save session messages failed", "error", err, "session_id", sessionID)
+		}
 	}
 
 	return result, intentResult.Intent, nil
@@ -144,6 +148,8 @@ func (o *Orchestrator) ChatStream(ctx context.Context, req models.ChatRequest, o
 		if err == nil && len(docs) > 0 {
 			ragContext := o.rag.BuildContext(docs)
 			systemContent = systemContent + "\n\nUse the following information to answer:\n\n" + ragContext
+		} else {
+			systemContent += noRAGContextInstruction
 		}
 	}
 
@@ -172,8 +178,9 @@ func (o *Orchestrator) ChatStream(ctx context.Context, req models.ChatRequest, o
 			Role:      "assistant",
 			Content:   fullResponse.String(),
 		}
-		go o.session.SaveMessage(context.Background(), userMsg)
-		go o.session.SaveMessage(context.Background(), assistantMsg)
+		if saveErr := o.session.SaveMessages(ctx, []models.Message{userMsg, assistantMsg}); saveErr != nil {
+			slog.Error("save session messages failed", "error", saveErr, "session_id", sessionID)
+		}
 	}
 
 	slog.Info("chat stream done", "error", err)

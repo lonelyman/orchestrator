@@ -69,6 +69,7 @@
 
 ### 5. SaveMessage fire-and-forget + race condition
 **ที่:** `internal/core/orchestrator/orchestrator.go:107-108`
+**สถานะ:** ✅ แก้แล้ว — save user/assistant ใน transaction เดียว และใช้ `sequence_number` สำหรับ history ordering
 **ปัญหา:** user/assistant message save async parallel → ลำดับสลับได้ → history request ถัดไปอ่านไม่ครบ
 
 **แก้:** save ใน transaction เดียว หรือใส่ `sequence_number` คอลัมน์
@@ -135,6 +136,7 @@
 
 ### 14. Readiness probe รวม external dependency
 **ที่:** `internal/api/handlers/health.go:51`
+**สถานะ:** ✅ แก้แล้ว — `/ready` เช็ก DB เท่านั้น, `/health` เช็ก full dependencies
 **ปัญหา:** LLM down → readiness fail → K8s remove pod → recovery ยาก
 
 **แก้:**
@@ -144,6 +146,7 @@
 
 ### 15. Streaming ใช้ `context.Background()`
 **ที่:** `internal/api/handlers/chat.go:76`, `parser.go:351`
+**สถานะ:** 🟡 แก้แล้วสำหรับ chat request context; OCR parser context ยังเหลือไว้ใน backlog
 **ปัญหา:** client cancel ไม่ propagate → LLM request ทำต่อ → เปลือง GPU
 
 **แก้:** ใช้ `c.UserContext()` หรือ derive จาก request context
@@ -177,6 +180,7 @@
 
 ### 19. RAG fallback คืน irrelevant docs
 **ที่:** `pgvector.go:86-91`
+**สถานะ:** ✅ แก้แล้ว — vector search คืน empty เมื่อไม่พบผลลัพธ์ และ prompt ห้ามเดาจาก general knowledge
 **ปัญหา:** เมื่อ vector search ไม่พบ → คืน docs ตาม `created_at DESC` → LLM ใช้ context ที่ไม่เกี่ยว → hallucinate
 
 **แก้:** คืน empty + ให้ LLM ตอบ "ไม่พบข้อมูลในเอกสาร"

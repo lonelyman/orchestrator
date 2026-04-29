@@ -71,43 +71,6 @@ func (p *PgvectorAdapter) Search(ctx context.Context, embedding []float32, limit
 		return nil, err
 	}
 
-	if len(results) == 0 {
-		var docsWithEmbedding int
-		if err := p.pool.QueryRow(ctx, `SELECT COUNT(embedding) FROM documents`).Scan(&docsWithEmbedding); err != nil {
-			return nil, fmt.Errorf("search count embeddings: %w", err)
-		}
-		if docsWithEmbedding == 0 {
-			slog.Info("search results", "docs", 0)
-			return results, nil
-		}
-
-		slog.Info("search similarity fallback", "docs_with_embedding", docsWithEmbedding)
-
-		fallbackQuery := `
-			SELECT id, content, source, created_at
-			FROM documents
-			WHERE embedding IS NOT NULL
-			ORDER BY created_at DESC
-			LIMIT $1`
-
-		fallbackRows, err := p.pool.Query(ctx, fallbackQuery, limit)
-		if err != nil {
-			return nil, fmt.Errorf("search fallback: %w", err)
-		}
-		defer fallbackRows.Close()
-
-		for fallbackRows.Next() {
-			var doc models.Document
-			if err := fallbackRows.Scan(&doc.ID, &doc.Content, &doc.Source, &doc.CreatedAt); err != nil {
-				return nil, fmt.Errorf("scan fallback: %w", err)
-			}
-			results = append(results, doc)
-		}
-		if err := fallbackRows.Err(); err != nil {
-			return nil, err
-		}
-	}
-
 	slog.Info("search results", "docs", len(results), "rows_err", rows.Err())
 	return results, nil
 }

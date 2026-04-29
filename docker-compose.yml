@@ -32,6 +32,8 @@ services:
          - .env
       environment:
          LLM_HOST: host.docker.internal
+         EMBED_HOST: host.docker.internal
+         OCR_HOST: host.docker.internal
          DB_HOST: orchestrator-postgres
          DB_PORT: 5432
       ports:

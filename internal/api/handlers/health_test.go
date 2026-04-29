@@ -51,7 +51,10 @@ func TestHealthHandlerLive_DoesNotRequireDependencies(t *testing.T) {
 }
 
 func TestHealthHandlerReady_Healthy(t *testing.T) {
-	handler := NewHealthHandler(fakeHealthOrchestrator{}, fakeHealthDB{})
+	handler := NewHealthHandler(
+		fakeHealthOrchestrator{healthErr: errors.New("llm down"), embedderErr: errors.New("embedder down")},
+		fakeHealthDB{},
+	)
 	app := fiber.New()
 	app.Get("/ready", handler.Ready)
 
@@ -66,12 +69,31 @@ func TestHealthHandlerReady_Healthy(t *testing.T) {
 	}
 }
 
-func TestHealthHandlerReady_UnhealthyDependency(t *testing.T) {
+func TestHealthHandlerReady_UnhealthyDatabase(t *testing.T) {
 	handler := NewHealthHandler(fakeHealthOrchestrator{}, fakeHealthDB{err: errors.New("db down")})
 	app := fiber.New()
 	app.Get("/ready", handler.Ready)
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/ready", nil))
+	if err != nil {
+		t.Fatalf("app test: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("expected %d, got %d", http.StatusServiceUnavailable, resp.StatusCode)
+	}
+}
+
+func TestHealthHandlerCheck_UnhealthyExternalDependency(t *testing.T) {
+	handler := NewHealthHandler(
+		fakeHealthOrchestrator{healthErr: errors.New("llm down")},
+		fakeHealthDB{},
+	)
+	app := fiber.New()
+	app.Get("/health", handler.Check)
+
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/health", nil))
 	if err != nil {
 		t.Fatalf("app test: %v", err)
 	}

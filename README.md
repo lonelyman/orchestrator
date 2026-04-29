@@ -25,8 +25,8 @@ go run cmd/server/main.go
 | Method | Endpoint             | หน้าที่                   |
 | ------ | -------------------- | ------------------------- |
 | GET    | /live                | Liveness: process ยังตอบ HTTP |
-| GET    | /ready               | Readiness: DB + LLM + Embedder พร้อม |
-| GET    | /health              | Backward-compatible readiness |
+| GET    | /ready               | Readiness: DB พร้อมรับ traffic |
+| GET    | /health              | Full dependency health: DB + LLM + Embedder |
 | POST   | /v1/chat/completions | Chat (OpenAI-compatible)  |
 | POST   | /v1/rag/ingest       | อัพโหลดเอกสาร             |
 | POST   | /v1/rag/upload       | อัพโหลดไฟล์ .txt/.md/.pdf |

@@ -73,7 +73,7 @@ func (h *ChatHandler) Completions(c fiber.Ctx) error {
 		c.Set("Cache-Control", "no-cache")
 		c.Set("Connection", "keep-alive")
 
-		streamCtx := context.WithValue(context.Background(), "session_id", sessionID)
+		streamCtx := context.WithValue(c.Context(), "session_id", sessionID)
 		streamCtx, streamCancel := context.WithTimeout(streamCtx, h.chatTimeout)
 
 		// Collect full response สำหรับ Audit Log
@@ -97,7 +97,7 @@ func (h *ChatHandler) Completions(c fiber.Ctx) error {
 	}
 
 	// Non-stream mode
-	ctx := context.WithValue(context.Background(), "session_id", sessionID)
+	ctx := context.WithValue(c.Context(), "session_id", sessionID)
 	ctx, cancel := context.WithTimeout(ctx, h.chatTimeout)
 	defer cancel()
 

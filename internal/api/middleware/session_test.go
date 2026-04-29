@@ -40,6 +40,10 @@ func (f *fakeSessionPort) SaveMessage(_ context.Context, _ models.Message) error
 	return nil
 }
 
+func (f *fakeSessionPort) SaveMessages(_ context.Context, _ []models.Message) error {
+	return nil
+}
+
 func (f *fakeSessionPort) ExpireSession(_ context.Context, _ string) error {
 	return nil
 }
