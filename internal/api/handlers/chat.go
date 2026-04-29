@@ -16,17 +16,27 @@ import (
 type ChatHandler struct {
 	orch        *orchestrator.Orchestrator
 	chatTimeout time.Duration
+	model       string
+	ownedBy     string
 }
 
 func NewChatHandler(orch *orchestrator.Orchestrator) *ChatHandler {
-	return NewChatHandlerWithTimeout(orch, 120*time.Second)
+	return NewChatHandlerWithTimeout(orch, 120*time.Second, "qwen2.5:7b", "ollama")
 }
 
-func NewChatHandlerWithTimeout(orch *orchestrator.Orchestrator, chatTimeout time.Duration) *ChatHandler {
+func NewChatHandlerWithTimeout(orch *orchestrator.Orchestrator, chatTimeout time.Duration, modelAndOwner ...string) *ChatHandler {
 	if chatTimeout <= 0 {
 		chatTimeout = 120 * time.Second
 	}
-	return &ChatHandler{orch: orch, chatTimeout: chatTimeout}
+	model := "qwen2.5:7b"
+	ownedBy := "ollama"
+	if len(modelAndOwner) > 0 && strings.TrimSpace(modelAndOwner[0]) != "" {
+		model = modelAndOwner[0]
+	}
+	if len(modelAndOwner) > 1 && strings.TrimSpace(modelAndOwner[1]) != "" {
+		ownedBy = modelAndOwner[1]
+	}
+	return &ChatHandler{orch: orch, chatTimeout: chatTimeout, model: model, ownedBy: ownedBy}
 }
 
 func (h *ChatHandler) Models(c fiber.Ctx) error {
@@ -34,9 +44,9 @@ func (h *ChatHandler) Models(c fiber.Ctx) error {
 		"object": "list",
 		"data": []fiber.Map{
 			{
-				"id":       "qwen2.5:7b",
+				"id":       h.model,
 				"object":   "model",
-				"owned_by": "ollama",
+				"owned_by": h.ownedBy,
 			},
 		},
 	})

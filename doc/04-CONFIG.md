@@ -43,8 +43,11 @@ LLM_BACKEND=ollama
 LLM_HOST=host.docker.internal
 LLM_PORT=11434
 LLM_MODEL=qwen2.5:7b
+LLM_API_KEY=
 
 # Embedding
+EMBED_HOST=host.docker.internal
+EMBED_PORT=11434
 EMBED_MODEL=nomic-embed-text-v2-moe
 
 # Database
@@ -118,6 +121,12 @@ Format:   username@nutrition.com
 1. แก้ .env:
    LLM_HOST=<ubuntu-server-ip>
    LLM_PORT=51434
+   LLM_BACKEND=vllm
+   LLM_API_KEY=<vllm-api-key-if-enabled>
+
+   # ถ้า embedding ยังรันผ่าน Ollama หรือ service อื่น ให้แยก endpoint ไว้
+   EMBED_HOST=<embedding-server-ip>
+   EMBED_PORT=11434
 
 2. เปิด vLLM (uncomment ใน docker-compose.yml):
    # vllm:

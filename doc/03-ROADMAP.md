@@ -30,7 +30,7 @@
 - [ ] **WebUI Login** — เชื่อม Open WebUI กับ Auth
 - [ ] **Document Management** — list/delete endpoints
 - [ ] **Circuit Breaker** — ถ้า Ollama ล่ม
-- [ ] **vLLM Adapter** — เพิ่ม OpenAI-compatible adapter และใช้ `LLM_BACKEND` เลือก backend
+- [x] **vLLM Adapter** — เพิ่ม OpenAI-compatible adapter และใช้ `LLM_BACKEND` เลือก backend
 - [ ] **LLM-based Intent Classifier** — แม่นยำกว่า rule-based
 
 ### Priority ต่ำ (Phase 4)

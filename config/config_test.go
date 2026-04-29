@@ -23,6 +23,9 @@ var configEnvKeys = []string{
 	"LLM_HOST",
 	"LLM_PORT",
 	"LLM_MODEL",
+	"LLM_API_KEY",
+	"EMBED_HOST",
+	"EMBED_PORT",
 	"EMBED_MODEL",
 	"DB_HOST",
 	"DB_PORT",
@@ -72,6 +75,9 @@ func TestLoad_AllowsDevDefaults(t *testing.T) {
 	if cfg.MaxUploadMegabyte != 10 || cfg.MaxUploadBytes != 10<<20 {
 		t.Fatalf("expected default upload 10MB, got %d MB / %d bytes", cfg.MaxUploadMegabyte, cfg.MaxUploadBytes)
 	}
+	if cfg.EmbedHost != cfg.LLMHost || cfg.EmbedPort != cfg.LLMPort {
+		t.Fatalf("expected embed endpoint to default to llm endpoint, got %s:%s vs %s:%s", cfg.EmbedHost, cfg.EmbedPort, cfg.LLMHost, cfg.LLMPort)
+	}
 }
 
 func TestLoad_RejectsInvalidPort(t *testing.T) {
@@ -102,6 +108,20 @@ func TestLoad_RejectsInvalidOperationalLimit(t *testing.T) {
 	}
 }
 
+func TestLoad_RejectsUnsupportedLLMBackend(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("DEV_MODE", "true")
+	t.Setenv("LLM_BACKEND", "unsupported")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(err.Error(), "LLM_BACKEND") {
+		t.Fatalf("expected LLM_BACKEND error, got %v", err)
+	}
+}
+
 func TestLoad_RejectsWeakProductionConfig(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv("DEV_MODE", "false")
@@ -129,6 +149,10 @@ func TestLoad_AcceptsProductionConfig(t *testing.T) {
 	t.Setenv("SESSION_EXPIRY", "45m")
 	t.Setenv("CHAT_TIMEOUT", "90s")
 	t.Setenv("MAX_UPLOAD_MB", "25")
+	t.Setenv("LLM_BACKEND", "vllm")
+	t.Setenv("LLM_API_KEY", "test-key")
+	t.Setenv("EMBED_HOST", "embed.example.com")
+	t.Setenv("EMBED_PORT", "11435")
 
 	cfg, err := Load()
 	if err != nil {
@@ -145,5 +169,11 @@ func TestLoad_AcceptsProductionConfig(t *testing.T) {
 	}
 	if cfg.MaxUploadBytes != 25<<20 {
 		t.Fatalf("expected max upload 25MB, got %d", cfg.MaxUploadBytes)
+	}
+	if cfg.LLMBackend != "vllm" || cfg.LLMAPIKey != "test-key" {
+		t.Fatalf("unexpected llm config: backend=%q key=%q", cfg.LLMBackend, cfg.LLMAPIKey)
+	}
+	if cfg.EmbedHost != "embed.example.com" || cfg.EmbedPort != "11435" {
+		t.Fatalf("unexpected embed endpoint: %s:%s", cfg.EmbedHost, cfg.EmbedPort)
 	}
 }

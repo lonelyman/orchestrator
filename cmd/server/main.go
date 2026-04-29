@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/enterprise-ai/orchestrator/internal/core/orchestrator"
 	"github.com/enterprise-ai/orchestrator/internal/core/rag"
 	"github.com/enterprise-ai/orchestrator/internal/domain/models"
+	"github.com/enterprise-ai/orchestrator/internal/domain/ports"
 	auditInfra "github.com/enterprise-ai/orchestrator/internal/infrastructure/audit"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/auth"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/embedder"
@@ -43,7 +45,7 @@ func main() {
 		slog.Error("invalid config", "error", err)
 		os.Exit(1)
 	}
-	slog.Info("config loaded", "port", cfg.APIPort, "model", cfg.LLMModel, "embed", cfg.EmbedModel)
+	slog.Info("config loaded", "port", cfg.APIPort, "llm_backend", cfg.LLMBackend, "model", cfg.LLMModel, "embed", cfg.EmbedModel)
 
 	// เชื่อมต่อ PostgreSQL
 	dbURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
@@ -79,9 +81,15 @@ func main() {
 	slog.Info("database migrations applied")
 
 	// สร้าง Adapters
-	ollamaURL := fmt.Sprintf("http://%s:%s", cfg.LLMHost, cfg.LLMPort)
-	ollamaAdapter := llm.NewOllamaAdapter(ollamaURL, cfg.LLMModel)
-	nomicAdapter := embedder.NewNomicAdapter(ollamaURL, cfg.EmbedModel)
+	llmURL := fmt.Sprintf("http://%s:%s", cfg.LLMHost, cfg.LLMPort)
+	llmAdapter, err := buildLLMAdapter(cfg, llmURL)
+	if err != nil {
+		slog.Error("configure llm adapter", "error", err)
+		os.Exit(1)
+	}
+
+	embedURL := fmt.Sprintf("http://%s:%s", cfg.EmbedHost, cfg.EmbedPort)
+	nomicAdapter := embedder.NewNomicAdapter(embedURL, cfg.EmbedModel)
 	pgvectorAdapter := vector.NewPgvectorAdapter(pool)
 
 	// สร้าง Session Adapter
@@ -93,7 +101,7 @@ func main() {
 
 	// สร้าง Core
 	ragEngine := rag.New(nomicAdapter, pgvectorAdapter)
-	orch := orchestrator.New(ollamaAdapter, ragEngine, sessionAdapter, cfg.SystemPrompt)
+	orch := orchestrator.New(llmAdapter, ragEngine, sessionAdapter, cfg.SystemPrompt)
 
 	// สร้าง Auth
 	ldapAdapter := auth.NewLDAPAdapter(cfg.ADServer, cfg.ADPort, cfg.ADBaseDN, cfg.ADDomain, cfg.DevMode, cfg.DevUsername, cfg.DevPassword)
@@ -102,7 +110,7 @@ func main() {
 
 	// สร้าง Handlers
 	healthHandler := handlers.NewHealthHandlerWithTimeout(orch, pgvectorAdapter, cfg.HealthTimeout)
-	chatHandler := handlers.NewChatHandlerWithTimeout(orch, cfg.ChatTimeout)
+	chatHandler := handlers.NewChatHandlerWithTimeout(orch, cfg.ChatTimeout, cfg.LLMModel, cfg.LLMBackend)
 	ragHandler := handlers.NewRAGHandlerWithLimit(ragEngine, cfg.MaxUploadBytes, cfg.RAGIngestTimeout)
 
 	// สร้าง Fiber app
@@ -172,4 +180,15 @@ func main() {
 	}
 	pool.Close()
 	slog.Info("server stopped cleanly")
+}
+
+func buildLLMAdapter(cfg *config.AppConfig, baseURL string) (ports.LLMPort, error) {
+	switch strings.ToLower(strings.TrimSpace(cfg.LLMBackend)) {
+	case "ollama":
+		return llm.NewOllamaAdapter(baseURL, cfg.LLMModel), nil
+	case "vllm", "openai-compatible":
+		return llm.NewOpenAICompatibleAdapter(baseURL, cfg.LLMModel, cfg.LLMAPIKey), nil
+	default:
+		return nil, fmt.Errorf("unsupported LLM_BACKEND: %s", cfg.LLMBackend)
+	}
 }

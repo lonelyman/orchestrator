@@ -27,9 +27,12 @@ type AppConfig struct {
 	LLMHost    string
 	LLMPort    string
 	LLMModel   string
+	LLMAPIKey  string
 
 	// Embedding
 	EmbedModel string
+	EmbedHost  string
+	EmbedPort  string
 
 	// Database
 	DBHost string
@@ -81,6 +84,9 @@ func Load() (*AppConfig, error) {
 		return nil, err
 	}
 	if _, err := parsePort("LLM_PORT", "11434"); err != nil {
+		return nil, err
+	}
+	if _, err := parsePort("EMBED_PORT", getEnv("LLM_PORT", "11434")); err != nil {
 		return nil, err
 	}
 	if _, err := parsePort("DB_PORT", "5432"); err != nil {
@@ -135,7 +141,10 @@ func Load() (*AppConfig, error) {
 		LLMHost:     getEnv("LLM_HOST", "localhost"),
 		LLMPort:     getEnv("LLM_PORT", "11434"),
 		LLMModel:    getEnv("LLM_MODEL", "qwen2.5:7b"),
+		LLMAPIKey:   getEnv("LLM_API_KEY", ""),
 		EmbedModel:  getEnv("EMBED_MODEL", "nomic-embed-text"),
+		EmbedHost:   getEnv("EMBED_HOST", getEnv("LLM_HOST", "localhost")),
+		EmbedPort:   getEnv("EMBED_PORT", getEnv("LLM_PORT", "11434")),
 		DBHost:      getEnv("DB_HOST", "localhost"),
 		DBPort:      getEnv("DB_PORT", "5432"),
 		DBName:      getEnv("DB_NAME", "orchestrator"),
@@ -177,6 +186,9 @@ func (c *AppConfig) Validate() error {
 		"LLM_HOST":      c.LLMHost,
 		"LLM_PORT":      c.LLMPort,
 		"LLM_MODEL":     c.LLMModel,
+		"LLM_BACKEND":   c.LLMBackend,
+		"EMBED_HOST":    c.EmbedHost,
+		"EMBED_PORT":    c.EmbedPort,
 		"EMBED_MODEL":   c.EmbedModel,
 		"DB_HOST":       c.DBHost,
 		"DB_PORT":       c.DBPort,
@@ -218,6 +230,9 @@ func (c *AppConfig) Validate() error {
 	}
 	if c.MaxUploadBytes <= 0 || c.MaxUploadMegabyte <= 0 {
 		errs = append(errs, fmt.Errorf("MAX_UPLOAD_MB must be greater than zero"))
+	}
+	if !isSupportedLLMBackend(c.LLMBackend) {
+		errs = append(errs, fmt.Errorf("LLM_BACKEND must be one of: ollama, vllm, openai-compatible"))
 	}
 
 	if !c.DevMode {
@@ -297,4 +312,13 @@ func isWeakJWTSecret(secret string) bool {
 		return true
 	}
 	return strings.Contains(strings.ToLower(secret), "change-this")
+}
+
+func isSupportedLLMBackend(backend string) bool {
+	switch strings.ToLower(strings.TrimSpace(backend)) {
+	case "ollama", "vllm", "openai-compatible":
+		return true
+	default:
+		return false
+	}
 }

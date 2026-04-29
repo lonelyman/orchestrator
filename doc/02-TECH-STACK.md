@@ -28,14 +28,13 @@
 
 สถานะปัจจุบัน:
 - Development ใช้ Ollama adapter (`internal/infrastructure/llm/ollama.go`)
-- Production target คือ vLLM แต่ยังไม่มี vLLM/OpenAI-compatible adapter ใน codebase
-- `LLM_BACKEND` อยู่ใน config แล้ว แต่ยังไม่ได้ใช้ switch adapter จริง
+- Production target คือ vLLM ผ่าน OpenAI-compatible adapter (`internal/infrastructure/llm/openai_compatible.go`)
+- `LLM_BACKEND=ollama|vllm|openai-compatible` ใช้เลือก adapter ตอน startup
+- Embedding endpoint แยกด้วย `EMBED_HOST`/`EMBED_PORT` เพราะ vLLM chat endpoint ไม่จำเป็นต้อง serve Ollama embeddings API
 
 แนวทางที่ต้องรักษา:
 - อย่าใส่ vLLM/OpenAI schema ปนใน Ollama adapter
-- เพิ่ม adapter แยก เช่น `internal/infrastructure/llm/openai_compatible.go`
 - ให้ adapter ใหม่ implement `domain/ports.LLMPort`
-- ให้ `cmd/server` หรือ bootstrap layer เลือก adapter จาก `LLM_BACKEND`
 - HTTP hardening เช่น timeout, status handling, retry/circuit breaker ควรอยู่ที่ adapter boundary
 
 ---
