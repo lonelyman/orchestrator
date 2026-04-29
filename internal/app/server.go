@@ -34,20 +34,28 @@ type Server struct {
 }
 
 func New(ctx context.Context, cfg *config.AppConfig) (*Server, error) {
+	dbURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
+		cfg.DBUser, cfg.DBPass, cfg.DBHost, cfg.DBPort, cfg.DBName)
+
+	migrationDB, err := sql.Open("pgx", dbURL)
+	if err != nil {
+		return nil, fmt.Errorf("open migration db: %w", err)
+	}
+	defer migrationDB.Close()
+
+	migrationCtx, cancel := context.WithTimeout(ctx, cfg.MigrationTimeout)
+	defer cancel()
+	if err := migrations.Up(migrationCtx, migrationDB); err != nil {
+		return nil, fmt.Errorf("run migrations: %w", err)
+	}
+	slog.Info("database migrations applied")
+
 	pool, err := connectPostgres(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	sqlDB := stdlib.OpenDBFromPool(pool)
-	migrationCtx, cancel := context.WithTimeout(ctx, cfg.MigrationTimeout)
-	defer cancel()
-	if err := migrations.Up(migrationCtx, sqlDB); err != nil {
-		sqlDB.Close()
-		pool.Close()
-		return nil, fmt.Errorf("run migrations: %w", err)
-	}
-	slog.Info("database migrations applied")
 
 	llmURL := fmt.Sprintf("http://%s:%s", cfg.LLMHost, cfg.LLMPort)
 	llmAdapter, err := buildLLMAdapter(cfg, llmURL)

@@ -16,6 +16,10 @@
 | `04-CONFIG.md` | Configuration, .env, Docker Commands | ✅ |
 | `05-SESSION-LOG.md` | Installation Log, Session Logs ทั้งหมด | ✅ |
 | `06-ENTERPRISE.md` | Enterprise Considerations (Security, Audit, Scale) | ✅ |
+| `07-CODE-REVIEW.md` | Code Review — Production Readiness Gap Analysis | ✅ 2026-04-29 |
+| `08-PRODUCTION-PLAN.md` | Production-Grade Roadmap (Sprint Plan) | ✅ 2026-04-29 |
+| `09-ARCHITECTURE-EVOLUTION.md` | PoC Ollama → Production vLLM Architecture Plan | ✅ 2026-04-29 |
+| `10-GREENFIELD-STACK.md` | Industry-Standard Stack (ถ้าเริ่มใหม่จาก 0) | ✅ 2026-04-29 |
 
 ---
 
@@ -33,7 +37,7 @@
 ✅ AD/LDAP Authentication + JWT
 ✅ Session Management (Sliding Window History)
 
-🔜 Audit Log
+✅ Audit Log
 🔜 Role-based Access Control
 🔜 WebUI Login Integration
 ⏳ Phase 4 — Production (Ubuntu + vLLM + Blackwell)

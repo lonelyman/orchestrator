@@ -14,7 +14,8 @@
       "Bash(docker compose *)",
       "Bash(goose -dir /Users/nipon.k/Coding/orchestrator/internal/infrastructure/migrations/sql postgres \"host=localhost port=15433 user=orchestrator password=changeme dbname=orchestrator sslmode=disable\" status)",
       "Bash(goose -dir /Users/nipon.k/Coding/orchestrator/internal/infrastructure/migrations/sql postgres \"host=localhost port=15433 user=orchestrator password=changeme dbname=orchestrator sslmode=disable\" up)",
-      "Bash(docker exec *)"
+      "Bash(docker exec *)",
+      "Bash(go build *)"
     ]
   }
 }
