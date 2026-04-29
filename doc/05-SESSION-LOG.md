@@ -93,3 +93,44 @@
 | `feat` | slog structured logging |
 | `feat` | AD/LDAP auth + JWT |
 | `a2551a3` | session management |
+
+---
+
+## 2026-04-29 (Day 2 — Night)
+
+### Audit Log ✅
+
+**Files สร้างใหม่:**
+| ไฟล์ | หน้าที่ |
+|---|---|
+| `docker/init/03-audit.sql` | audit_logs table + indexes |
+| `internal/domain/models/audit.go` | AuditLog, AuditLogFilter |
+| `internal/domain/ports/audit.go` | AuditPort interface |
+| `internal/infrastructure/audit/postgres.go` | PostgreSQL adapter |
+| `internal/api/middleware/audit.go` | Auto-record ทุก request |
+| `internal/api/handlers/audit.go` | GET /v1/admin/logs |
+
+**บันทึกข้อมูล:**
+- user_id, username ✅
+- session_id ✅
+- method + path ✅
+- query (คำถาม) ✅
+- response_preview (200 chars) ✅
+- latency_ms ✅
+- status_code ✅
+- ip_address ✅
+
+**Endpoint:**
+```
+GET /v1/admin/logs?user_id=nipon.k&intent=rag
+Authorization: Bearer TOKEN
+```
+
+**Git commit:** `aabcf34`
+
+### TODO ที่ยังค้างอยู่
+- [ ] Role-based Access Control
+- [ ] intent field ใน audit_logs (ปัจจุบันอยู่ใน messages.metadata)
+- [ ] Rate Limiting
+- [ ] WebUI Login
+- [ ] Document Management

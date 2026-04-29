@@ -36,9 +36,9 @@ func AuditMiddleware(auditPort ports.AuditPort) fiber.Handler {
 		query, _ := c.Locals("audit_query").(string)
 		responsePreview, _ := c.Locals("audit_response").(string)
 
-		// Truncate response preview
-		if len(responsePreview) > 200 {
-			responsePreview = responsePreview[:200] + "..."
+		// Truncate response preview ที่ rune boundary (Thai = 3 bytes/ตัว)
+		if len([]rune(responsePreview)) > 200 {
+			responsePreview = string([]rune(responsePreview)[:200]) + "..."
 		}
 
 		// สร้าง audit log
@@ -74,11 +74,12 @@ func SetAuditQuery(c fiber.Ctx, query string) {
 
 // SetAuditResponse helper สำหรับ handler ใส่ response ลงใน context
 func SetAuditResponse(c fiber.Ctx, response string) {
-	preview := response
-	if len(preview) > 200 {
-		preview = preview[:200] + "..."
+	runes := []rune(response)
+	if len(runes) > 200 {
+		c.Locals("audit_response", string(runes[:200])+"...")
+		return
 	}
-	c.Locals("audit_response", preview)
+	c.Locals("audit_response", response)
 }
 
 // SetAuditIntent helper สำหรับ handler ใส่ intent ลงใน context

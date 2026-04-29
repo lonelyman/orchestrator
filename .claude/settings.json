@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(git fetch *)",
-      "Bash(git reset *)"
+      "Bash(git reset *)",
+      "Bash(curl -s -X POST http://10.19.105.32:50000/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"nipon.k\",\"password\":\"@nutrition888\"}')",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 -c ' *)"
     ]
   }
 }
