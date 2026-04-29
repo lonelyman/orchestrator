@@ -128,6 +128,7 @@ Production risk ที่ต้องกลับมาแก้ก่อนใ�
 
 ```
 บันทึกทุก Query:
+- request_id
 - user_id, username
 - session_id
 - คำถาม

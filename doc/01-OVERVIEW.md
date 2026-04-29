@@ -91,3 +91,5 @@ RAG        MCP       Direct
 | POST | /v1/chat/completions | ✅ JWT | Chat + Stream + Session |
 | POST | /v1/rag/ingest | ✅ JWT | Upload text ตรงๆ |
 | POST | /v1/rag/upload | ✅ JWT | Upload ไฟล์ (PDF/TXT/MD) |
+
+ทุก response มี `X-Request-ID` สำหรับ trace log และ audit trail

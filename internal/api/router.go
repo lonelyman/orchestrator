@@ -31,6 +31,9 @@ func NewRouter(deps RouterDependencies) *fiber.App {
 		BodyLimit: deps.Config.BodyLimit,
 	})
 
+	app.Use(middleware.RequestIDMiddleware())
+	app.Use(middleware.RecoveryMiddleware())
+
 	RegisterRoutes(app, deps)
 	return app
 }

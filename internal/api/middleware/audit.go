@@ -49,6 +49,7 @@ func AuditMiddleware(auditPort ports.AuditPort, timeout ...time.Duration) fiber.
 
 		// สร้าง audit log
 		log := models.AuditLog{
+			RequestID:       requestID(c),
 			UserID:          userID,
 			Username:        username,
 			SessionID:       sessionID,
@@ -95,4 +96,9 @@ func SetAuditResponse(c fiber.Ctx, response string) {
 func SetAuditIntent(c fiber.Ctx, intent string) {
 	// ลบ whitespace ออก
 	c.Locals("intent", strings.TrimSpace(intent))
+}
+
+func requestID(c fiber.Ctx) string {
+	requestID, _ := c.Locals(RequestIDKey).(string)
+	return requestID
 }

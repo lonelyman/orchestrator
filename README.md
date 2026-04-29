@@ -45,6 +45,8 @@ go run cmd/server/main.go
 }
 ```
 
+ทุก response จะมี header `X-Request-ID`; client ส่ง header นี้มาเองได้เพื่อ trace request ข้ามระบบ
+
 หมายเหตุ: endpoint `/v1/chat/completions` ใช้ request schema แบบ OpenAI แต่ response ถูกครอบด้วย `data` ตามมาตรฐานบริษัท
 
 ### Upload constraints

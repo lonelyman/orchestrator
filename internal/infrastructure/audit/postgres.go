@@ -24,11 +24,12 @@ func (p *PostgresAdapter) Save(ctx context.Context, log models.AuditLog) error {
 
 	query := `
 		INSERT INTO audit_logs 
-		(user_id, username, session_id, method, path, intent, 
+		(request_id, user_id, username, session_id, method, path, intent, 
 		 query, response_preview, sources, latency_ms, status_code, ip_address)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`
 
 	_, err := p.pool.Exec(ctx, query,
+		log.RequestID,
 		log.UserID, log.Username, log.SessionID,
 		log.Method, log.Path, log.Intent,
 		log.Query, log.ResponsePreview, sourcesJSON,
@@ -47,7 +48,7 @@ func (p *PostgresAdapter) List(ctx context.Context, filter models.AuditLogFilter
 	}
 
 	query := `
-		SELECT id, user_id, username, session_id, method, path,
+		SELECT id, request_id, user_id, username, session_id, method, path,
 		       intent, query, response_preview, sources,
 		       latency_ms, status_code, ip_address, created_at
 		FROM audit_logs
@@ -70,7 +71,7 @@ func (p *PostgresAdapter) List(ctx context.Context, filter models.AuditLogFilter
 		var log models.AuditLog
 		var sourcesBytes []byte
 		if err := rows.Scan(
-			&log.ID, &log.UserID, &log.Username, &log.SessionID,
+			&log.ID, &log.RequestID, &log.UserID, &log.Username, &log.SessionID,
 			&log.Method, &log.Path, &log.Intent, &log.Query,
 			&log.ResponsePreview, &sourcesBytes,
 			&log.LatencyMs, &log.StatusCode, &log.IPAddress, &log.CreatedAt,

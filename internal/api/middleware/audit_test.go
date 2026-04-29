@@ -38,6 +38,7 @@ func TestAuditMiddleware_SavesWithUsableBackgroundContext(t *testing.T) {
 	app.Use(func(c fiber.Ctx) error {
 		c.Locals("claims", &models.Claims{UserID: "u1", Username: "user1"})
 		c.Locals("session_id", "s1")
+		c.Locals(RequestIDKey, "req-1")
 		SetAuditQuery(c, "hello")
 		SetAuditResponse(c, "world")
 		SetAuditIntent(c, "direct")
@@ -61,6 +62,9 @@ func TestAuditMiddleware_SavesWithUsableBackgroundContext(t *testing.T) {
 		}
 		if call.log.UserID != "u1" || call.log.Username != "user1" || call.log.SessionID != "s1" {
 			t.Fatalf("unexpected audit identity: %+v", call.log)
+		}
+		if call.log.RequestID != "req-1" {
+			t.Fatalf("expected request id, got %q", call.log.RequestID)
 		}
 		if call.log.Query != "hello" || call.log.ResponsePreview != "world" || call.log.Intent != "direct" {
 			t.Fatalf("unexpected audit content: %+v", call.log)
