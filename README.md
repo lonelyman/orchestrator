@@ -57,8 +57,13 @@ go run cmd/server/main.go
 
 ### PDF extraction notes
 
-- ลำดับการดึงข้อความจาก PDF: `pdftotext` -> Go PDF parser -> OCR (`pdftoppm` + `tesseract`)
-- สำหรับไฟล์สแกน แนะนำติดตั้งเครื่องมือ OCR:
+- ลำดับการดึงข้อความจาก PDF: `pdftotext` -> Go PDF parser -> OCR
+- OCR เลือกได้ด้วย `OCR_ENGINE`:
+  - `ollama`: ใช้โมเดล AI OCR ผ่าน Ollama `/api/generate` เช่น `scb10x/typhoon-ocr1.5-3b:latest`
+  - `tesseract`: ใช้ local binary `pdftoppm` + `tesseract -l tha+eng`
+  - `disabled`: ไม่ทำ OCR ถ้า PDF ไม่มี embedded text
+- `.env.example` ตั้งค่า dev เป็น `OCR_ENGINE=ollama` เพื่อใช้โมเดล OCR ที่รันใน Ollama อยู่แล้ว
+- สำหรับ fallback แบบ local binary แนะนำติดตั้งเครื่องมือ OCR:
 
 ```bash
 brew install poppler tesseract tesseract-lang
@@ -80,12 +85,13 @@ go test ./internal/api/handlers -run TestUpload_WithProvidedPDF -v
 - แนวทางแก้ในโค้ด: เพิ่ม fallback การ parse เป็น 3 ชั้น
    - `pdftotext`
    - Go PDF parser
-   - OCR (`pdftoppm` + `tesseract -l tha+eng`)
+   - OCR (`ollama` AI OCR หรือ `pdftoppm` + `tesseract -l tha+eng`)
 
 สิ่งที่ต้องมีใน runtime environment (เครื่องใหม่/เซิร์ฟเวอร์ใหม่):
 
 - อย่างน้อย: `pdftotext` (จาก poppler)
-- สำหรับไฟล์ PDF สแกน: ต้องมี `pdftoppm` + `tesseract` + Thai language data
+- สำหรับ `OCR_ENGINE=ollama`: ต้องมี `pdftoppm` และ Ollama ที่มีโมเดล OCR
+- สำหรับ `OCR_ENGINE=tesseract`: ต้องมี `pdftoppm` + `tesseract` + Thai language data
 
 คำสั่งติดตั้งตัวอย่าง:
 

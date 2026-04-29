@@ -27,6 +27,13 @@ var configEnvKeys = []string{
 	"EMBED_HOST",
 	"EMBED_PORT",
 	"EMBED_MODEL",
+	"OCR_ENGINE",
+	"OCR_HOST",
+	"OCR_PORT",
+	"OCR_MODEL",
+	"OCR_TIMEOUT",
+	"OCR_MAX_PAGES",
+	"OCR_PROMPT",
 	"DB_HOST",
 	"DB_PORT",
 	"DB_NAME",
@@ -78,6 +85,15 @@ func TestLoad_AllowsDevDefaults(t *testing.T) {
 	if cfg.EmbedHost != cfg.LLMHost || cfg.EmbedPort != cfg.LLMPort {
 		t.Fatalf("expected embed endpoint to default to llm endpoint, got %s:%s vs %s:%s", cfg.EmbedHost, cfg.EmbedPort, cfg.LLMHost, cfg.LLMPort)
 	}
+	if cfg.OCREngine != "tesseract" {
+		t.Fatalf("expected default OCR engine tesseract, got %q", cfg.OCREngine)
+	}
+	if cfg.OCRTimeout != 180*time.Second {
+		t.Fatalf("expected default OCR timeout 180s, got %s", cfg.OCRTimeout)
+	}
+	if cfg.OCRMaxPages != 20 {
+		t.Fatalf("expected default OCR max pages 20, got %d", cfg.OCRMaxPages)
+	}
 }
 
 func TestLoad_RejectsInvalidPort(t *testing.T) {
@@ -122,6 +138,20 @@ func TestLoad_RejectsUnsupportedLLMBackend(t *testing.T) {
 	}
 }
 
+func TestLoad_RejectsUnsupportedOCREngine(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("DEV_MODE", "true")
+	t.Setenv("OCR_ENGINE", "unsupported")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(err.Error(), "OCR_ENGINE") {
+		t.Fatalf("expected OCR_ENGINE error, got %v", err)
+	}
+}
+
 func TestLoad_RejectsWeakProductionConfig(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv("DEV_MODE", "false")
@@ -153,6 +183,13 @@ func TestLoad_AcceptsProductionConfig(t *testing.T) {
 	t.Setenv("LLM_API_KEY", "test-key")
 	t.Setenv("EMBED_HOST", "embed.example.com")
 	t.Setenv("EMBED_PORT", "11435")
+	t.Setenv("OCR_ENGINE", "ollama")
+	t.Setenv("OCR_HOST", "ocr.example.com")
+	t.Setenv("OCR_PORT", "11436")
+	t.Setenv("OCR_MODEL", "scb10x/typhoon-ocr1.5-3b:latest")
+	t.Setenv("OCR_TIMEOUT", "240s")
+	t.Setenv("OCR_MAX_PAGES", "30")
+	t.Setenv("OCR_PROMPT", "OCR only")
 
 	cfg, err := Load()
 	if err != nil {
@@ -175,5 +212,14 @@ func TestLoad_AcceptsProductionConfig(t *testing.T) {
 	}
 	if cfg.EmbedHost != "embed.example.com" || cfg.EmbedPort != "11435" {
 		t.Fatalf("unexpected embed endpoint: %s:%s", cfg.EmbedHost, cfg.EmbedPort)
+	}
+	if cfg.OCREngine != "ollama" || cfg.OCRHost != "ocr.example.com" || cfg.OCRPort != "11436" {
+		t.Fatalf("unexpected OCR endpoint: engine=%q endpoint=%s:%s", cfg.OCREngine, cfg.OCRHost, cfg.OCRPort)
+	}
+	if cfg.OCRModel != "scb10x/typhoon-ocr1.5-3b:latest" || cfg.OCRPrompt != "OCR only" {
+		t.Fatalf("unexpected OCR model/prompt: model=%q prompt=%q", cfg.OCRModel, cfg.OCRPrompt)
+	}
+	if cfg.OCRTimeout != 240*time.Second || cfg.OCRMaxPages != 30 {
+		t.Fatalf("unexpected OCR limits: timeout=%s maxPages=%d", cfg.OCRTimeout, cfg.OCRMaxPages)
 	}
 }

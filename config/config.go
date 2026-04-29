@@ -60,6 +60,13 @@ type AppConfig struct {
 	RateLimitPerMin   int
 	MaxUploadBytes    int64
 	MaxUploadMegabyte int
+	OCREngine         string
+	OCRHost           string
+	OCRPort           string
+	OCRModel          string
+	OCRPrompt         string
+	OCRTimeout        time.Duration
+	OCRMaxPages       int
 
 	// System Prompt
 	SystemPrompt string
@@ -87,6 +94,9 @@ func Load() (*AppConfig, error) {
 		return nil, err
 	}
 	if _, err := parsePort("EMBED_PORT", getEnv("LLM_PORT", "11434")); err != nil {
+		return nil, err
+	}
+	if _, err := parsePort("OCR_PORT", getEnv("LLM_PORT", "11434")); err != nil {
 		return nil, err
 	}
 	if _, err := parsePort("DB_PORT", "5432"); err != nil {
@@ -130,6 +140,14 @@ func Load() (*AppConfig, error) {
 		return nil, err
 	}
 	maxUploadBytes := int64(maxUploadMB) << 20
+	ocrTimeout, err := parseDuration("OCR_TIMEOUT", "180s")
+	if err != nil {
+		return nil, err
+	}
+	ocrMaxPages, err := parsePositiveInt("OCR_MAX_PAGES", "20")
+	if err != nil {
+		return nil, err
+	}
 
 	cfg := &AppConfig{
 		DevMode:     devMode,
@@ -166,6 +184,13 @@ func Load() (*AppConfig, error) {
 		RateLimitPerMin:   rateLimitPerMin,
 		MaxUploadBytes:    maxUploadBytes,
 		MaxUploadMegabyte: maxUploadMB,
+		OCREngine:         getEnv("OCR_ENGINE", "tesseract"),
+		OCRHost:           getEnv("OCR_HOST", getEnv("LLM_HOST", "localhost")),
+		OCRPort:           getEnv("OCR_PORT", getEnv("LLM_PORT", "11434")),
+		OCRModel:          getEnv("OCR_MODEL", "scb10x/typhoon-ocr1.5-3b:latest"),
+		OCRPrompt:         getEnv("OCR_PROMPT", "Extract all readable text from this image. Preserve Thai and English text. Return only the extracted text."),
+		OCRTimeout:        ocrTimeout,
+		OCRMaxPages:       ocrMaxPages,
 		SystemPrompt: getEnv("SYSTEM_PROMPT",
 			"You are a helpful enterprise AI assistant. You must always respond in Thai language only."),
 	}
@@ -190,6 +215,7 @@ func (c *AppConfig) Validate() error {
 		"EMBED_HOST":    c.EmbedHost,
 		"EMBED_PORT":    c.EmbedPort,
 		"EMBED_MODEL":   c.EmbedModel,
+		"OCR_ENGINE":    c.OCREngine,
 		"DB_HOST":       c.DBHost,
 		"DB_PORT":       c.DBPort,
 		"DB_NAME":       c.DBName,
@@ -230,6 +256,29 @@ func (c *AppConfig) Validate() error {
 	}
 	if c.MaxUploadBytes <= 0 || c.MaxUploadMegabyte <= 0 {
 		errs = append(errs, fmt.Errorf("MAX_UPLOAD_MB must be greater than zero"))
+	}
+	if !isSupportedOCREngine(c.OCREngine) {
+		errs = append(errs, fmt.Errorf("OCR_ENGINE must be one of: tesseract, ollama, disabled"))
+	}
+	if strings.EqualFold(strings.TrimSpace(c.OCREngine), "ollama") {
+		if strings.TrimSpace(c.OCRHost) == "" {
+			errs = append(errs, fmt.Errorf("OCR_HOST is required when OCR_ENGINE=ollama"))
+		}
+		if strings.TrimSpace(c.OCRPort) == "" {
+			errs = append(errs, fmt.Errorf("OCR_PORT is required when OCR_ENGINE=ollama"))
+		}
+		if strings.TrimSpace(c.OCRModel) == "" {
+			errs = append(errs, fmt.Errorf("OCR_MODEL is required when OCR_ENGINE=ollama"))
+		}
+		if strings.TrimSpace(c.OCRPrompt) == "" {
+			errs = append(errs, fmt.Errorf("OCR_PROMPT is required when OCR_ENGINE=ollama"))
+		}
+	}
+	if c.OCRTimeout <= 0 {
+		errs = append(errs, fmt.Errorf("OCR_TIMEOUT must be greater than zero"))
+	}
+	if c.OCRMaxPages <= 0 {
+		errs = append(errs, fmt.Errorf("OCR_MAX_PAGES must be greater than zero"))
 	}
 	if !isSupportedLLMBackend(c.LLMBackend) {
 		errs = append(errs, fmt.Errorf("LLM_BACKEND must be one of: ollama, vllm, openai-compatible"))
@@ -317,6 +366,15 @@ func isWeakJWTSecret(secret string) bool {
 func isSupportedLLMBackend(backend string) bool {
 	switch strings.ToLower(strings.TrimSpace(backend)) {
 	case "ollama", "vllm", "openai-compatible":
+		return true
+	default:
+		return false
+	}
+}
+
+func isSupportedOCREngine(engine string) bool {
+	switch strings.ToLower(strings.TrimSpace(engine)) {
+	case "tesseract", "ollama", "disabled":
 		return true
 	default:
 		return false

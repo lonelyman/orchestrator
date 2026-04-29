@@ -84,7 +84,7 @@ orchestrator/
     │   ├── rag/
     │   │   ├── rag.go                  ← Ingest + Search + BuildContext
     │   │   ├── chunker.go              ← chunk size 200, overlap 20
-    │   │   └── parser.go               ← PDF(pdftotext→GoLib→OCR) + TXT + MD
+    │   │   └── parser.go               ← PDF(pdftotext→GoLib→Ollama/Tesseract OCR) + TXT + MD
     │   └── mcp/executor.go             ← Tool Registry
     └── infrastructure/
         ├── llm/ollama.go               ← Chat + Stream + HealthCheck

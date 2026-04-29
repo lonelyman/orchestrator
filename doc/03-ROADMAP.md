@@ -31,6 +31,7 @@
 - [ ] **Document Management** — list/delete endpoints
 - [ ] **Circuit Breaker** — ถ้า Ollama ล่ม
 - [x] **vLLM Adapter** — เพิ่ม OpenAI-compatible adapter และใช้ `LLM_BACKEND` เลือก backend
+- [x] **AI OCR Adapter** — ใช้ `OCR_ENGINE=ollama` กับโมเดล `scb10x/typhoon-ocr1.5-3b:latest`
 - [ ] **LLM-based Intent Classifier** — แม่นยำกว่า rule-based
 
 ### Priority ต่ำ (Phase 4)
@@ -47,7 +48,7 @@
 
 | Issue | Status | แนวทางแก้ |
 |---|---|---|
-| Scanned PDF อ่านไม่ออก | ✅ แก้แล้ว | tesseract OCR (tha+eng) |
+| Scanned PDF อ่านไม่ออก | ✅ แก้แล้ว | Ollama AI OCR หรือ tesseract OCR (tha+eng) |
 | pgvector Search ได้ 0 docs | ✅ แก้แล้ว | fallback query |
 | SQL Server ยังไม่เชื่อมต่อจริง | ⏳ รอ | sqlserver.go พร้อมแล้ว |
 | WebUI ยังไม่มี Login | 🔜 | เชื่อม Auth ทีหลัง |

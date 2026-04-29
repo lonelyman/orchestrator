@@ -77,8 +77,16 @@ func New(ctx context.Context, cfg *config.AppConfig) (*Server, error) {
 		AuthHandler:   handlers.NewAuthHandler(ldapAdapter, jwtManager),
 		HealthHandler: handlers.NewHealthHandlerWithTimeout(orch, vectorAdapter, cfg.HealthTimeout),
 		ChatHandler:   handlers.NewChatHandlerWithTimeout(orch, cfg.ChatTimeout, cfg.LLMModel, cfg.LLMBackend),
-		RAGHandler:    handlers.NewRAGHandlerWithLimit(ragEngine, cfg.MaxUploadBytes, cfg.RAGIngestTimeout),
-		AuditHandler:  handlers.NewAuditHandler(auditAdapter),
+		RAGHandler: handlers.NewRAGHandlerWithOptions(ragEngine, rag.ParseOptions{
+			MaxBytes:    cfg.MaxUploadBytes,
+			OCREngine:   cfg.OCREngine,
+			OCRBaseURL:  fmt.Sprintf("http://%s:%s", cfg.OCRHost, cfg.OCRPort),
+			OCRModel:    cfg.OCRModel,
+			OCRPrompt:   cfg.OCRPrompt,
+			OCRTimeout:  cfg.OCRTimeout,
+			OCRMaxPages: cfg.OCRMaxPages,
+		}, cfg.RAGIngestTimeout),
+		AuditHandler: handlers.NewAuditHandler(auditAdapter),
 	})
 
 	return &Server{App: fiberApp, pool: pool, sqlDB: sqlDB}, nil

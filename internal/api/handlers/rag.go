@@ -11,6 +11,7 @@ import (
 type RAGHandler struct {
 	ragEngine        ragIngestor
 	maxUploadBytes   int64
+	parseOptions     rag.ParseOptions
 	ragIngestTimeout time.Duration
 }
 
@@ -27,15 +28,22 @@ func NewRAGHandlerWithIngestor(ragEngine ragIngestor) *RAGHandler {
 }
 
 func NewRAGHandlerWithLimit(ragEngine ragIngestor, maxUploadBytes int64, ragIngestTimeout time.Duration) *RAGHandler {
+	return NewRAGHandlerWithOptions(ragEngine, rag.ParseOptions{MaxBytes: maxUploadBytes}, ragIngestTimeout)
+}
+
+func NewRAGHandlerWithOptions(ragEngine ragIngestor, parseOptions rag.ParseOptions, ragIngestTimeout time.Duration) *RAGHandler {
+	maxUploadBytes := parseOptions.MaxBytes
 	if maxUploadBytes <= 0 {
 		maxUploadBytes = rag.MaxUploadBytes
 	}
+	parseOptions.MaxBytes = maxUploadBytes
 	if ragIngestTimeout <= 0 {
 		ragIngestTimeout = 120 * time.Second
 	}
 	return &RAGHandler{
 		ragEngine:        ragEngine,
 		maxUploadBytes:   maxUploadBytes,
+		parseOptions:     parseOptions,
 		ragIngestTimeout: ragIngestTimeout,
 	}
 }
@@ -85,7 +93,7 @@ func (h *RAGHandler) Upload(c fiber.Ctx) error {
 	}
 	defer f.Close()
 
-	text, err := rag.ParseWithLimit(file.Filename, f, h.maxUploadBytes)
+	text, err := rag.ParseWithOptions(file.Filename, f, h.parseOptions)
 	if err != nil {
 		return Fail(c, 400, err.Error(), "PARSE_ERROR")
 	}

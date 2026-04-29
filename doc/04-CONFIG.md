@@ -16,6 +16,7 @@ launchctl setenv OLLAMA_KV_CACHE_TYPE q8_0
 # Models
 ollama pull qwen2.5:7b
 ollama pull nomic-embed-text-v2-moe
+ollama pull scb10x/typhoon-ocr1.5-3b:latest
 
 # Check
 ollama list
@@ -49,6 +50,15 @@ LLM_API_KEY=
 EMBED_HOST=host.docker.internal
 EMBED_PORT=11434
 EMBED_MODEL=nomic-embed-text-v2-moe
+
+# OCR
+OCR_ENGINE=ollama
+OCR_HOST=host.docker.internal
+OCR_PORT=11434
+OCR_MODEL=scb10x/typhoon-ocr1.5-3b:latest
+OCR_TIMEOUT=180s
+OCR_MAX_PAGES=20
+OCR_PROMPT=Extract all readable text from this image. Preserve Thai and English text. Return only the extracted text.
 
 # Database
 DB_HOST=orchestrator-postgres
@@ -127,6 +137,12 @@ Format:   username@nutrition.com
    # ถ้า embedding ยังรันผ่าน Ollama หรือ service อื่น ให้แยก endpoint ไว้
    EMBED_HOST=<embedding-server-ip>
    EMBED_PORT=11434
+
+   # OCR แยก endpoint ไว้ได้ จะคง Ollama dev หรือย้ายเป็น OCR service ภายหลัง
+   OCR_ENGINE=ollama
+   OCR_HOST=<ocr-server-ip>
+   OCR_PORT=11434
+   OCR_MODEL=scb10x/typhoon-ocr1.5-3b:latest
 
 2. เปิด vLLM (uncomment ใน docker-compose.yml):
    # vllm:
