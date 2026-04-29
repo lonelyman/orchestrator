@@ -259,20 +259,6 @@ type EmbedderPort interface {
 - `POST /v1/chat/completions` → ตอบภาษาไทย ✅
 - Git commit: `feat: phase 0 - go orchestrator with ollama adapter` ✅
 
-#### [2026-04-29] Incident: RAG Upload PDF ได้ PARSE_ERROR บางไฟล์
-
-- อาการที่เจอ: `400 PARSE_ERROR` และข้อความ `no text extracted from PDF`
-- ไฟล์ตัวอย่างที่ใช้ทดสอบ: ประกาศภาษาไทย (PDF สแกน)
-- Root cause:
-   - เครื่องที่รันไม่มี `pdftotext` ช่วงแรก
-   - หลังติดตั้ง `pdftotext` แล้ว ยังมีบางไฟล์ที่เป็นสแกน/โครงสร้างพิเศษ ทำให้ดึงข้อความไม่ได้
-- วิธีแก้ที่ทำแล้ว:
-   - ปรับ parser ให้ fallback 3 ชั้น: `pdftotext` -> Go PDF parser -> OCR (`pdftoppm` + `tesseract -l tha+eng`)
-   - เพิ่ม upload integration test ด้วยไฟล์จริง
-- ข้อควรระวังสำหรับการย้ายไปรันเครื่องอื่น:
-   - ต้องติดตั้ง dependencies runtime ให้ครบ โดยเฉพาะ OCR tools ถ้าต้องรองรับ PDF สแกน
-   - Alpine แนะนำ `apk add --no-cache poppler-utils tesseract-ocr tesseract-ocr-data-tha`
-
 ---
 
 #### [2026-04-28] Phase 1 RAG Engine — สำเร็จ ✅
@@ -300,17 +286,13 @@ type EmbedderPort interface {
 
 ---
 
-#### [2026-04-28] MacBook Setup — สำเร็จ ✅
+#### [2026-04-29] PDF Upload + OCR — สำเร็จ ✅
 
-- Clone repo จาก GitHub ✅
-- สร้าง Dockerfile (multi-stage build) ✅
-- สร้าง .env.example, .gitignore, README.md ✅
-- ย้าย docker-compose.yml ไป root ✅
-- รัน PostgreSQL + pgvector ผ่าน Docker ✅
-- Build และรัน Go Server ใน Docker ✅
-- ทดสอบ Chat ผ่าน qwen3.5:cloud (ชั่วคราว) ✅
-
-**หมายเหตุ:** ใช้ qwen3.5:cloud ชั่วคราว รอ qwen2.5:7b download เสร็จบน iMac
+- Copilot เพิ่ม 3-layer PDF fallback: pdftotext → Go PDF → tesseract OCR ✅
+- tesseract รองรับภาษาไทย (tha+eng) ✅
+- Upload PDF จริง "บค.002-2568 OT Policy" → 5 chunks ✅
+- Chat ถามเรื่อง OT → AI ตอบจากเอกสารจริง ✅
+- เปลี่ยนกลับใช้ qwen2.5:7b แทน qwen3.5:cloud ✅
 
 | ไฟล์                                       | Package | หน้าที่                                 |
 | ------------------------------------------ | ------- | --------------------------------------- |
@@ -326,7 +308,20 @@ type EmbedderPort interface {
 - Driver: `github.com/microsoft/go-mssqldb` ✅
 - Git commit: `feat: phase 2 - MCP bridge structure` ✅
 
-**หมายเหตุ:** ยังไม่ได้เชื่อมต่อ SQL Server จริง รอ Phase ถัดไป
+#### ⚠️ Known Issue — PDF Upload (Scanned PDF)
+
+**ปัญหา:** PDF แบบ Scanned Image (ที่ Mac OCR ให้อัตโนมัติ) pdftotext ใน Docker อ่านไม่ออก
+
+**Workaround ชั่วคราว:**
+
+- ใช้ `/v1/rag/ingest` ส่ง text ตรงๆ แทน
+- หรือ Export PDF เป็น .txt ก่อน upload
+
+**แนวทางแก้จริง (TODO):**
+
+- เพิ่ม tesseract OCR ใน Dockerfile
+- รองรับภาษาไทย (tesseract-lang-tha)
+- แปลง PDF page → image → OCR → text
 
 ---
 
