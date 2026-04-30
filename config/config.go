@@ -40,6 +40,14 @@ type AppConfig struct {
 	EmbedHost  string
 	EmbedPort  string
 
+	// Web Search
+	WebSearchEnabled    bool
+	WebSearchProvider   string
+	WebSearchAPIKey     string
+	WebSearchBaseURL    string
+	WebSearchTimeout    time.Duration
+	WebSearchMaxResults int
+
 	// Database
 	DBHost                  string
 	DBPort                  string
@@ -193,6 +201,18 @@ func Load() (*AppConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+	webSearchEnabled, err := parseBool("WEB_SEARCH_ENABLED", "false")
+	if err != nil {
+		return nil, err
+	}
+	webSearchTimeout, err := parseDuration("WEB_SEARCH_TIMEOUT", "10s")
+	if err != nil {
+		return nil, err
+	}
+	webSearchMaxResults, err := parsePositiveInt("WEB_SEARCH_MAX_RESULTS", "5")
+	if err != nil {
+		return nil, err
+	}
 	systemPrompt, err := loadSystemPrompt()
 	if err != nil {
 		return nil, err
@@ -223,6 +243,12 @@ func Load() (*AppConfig, error) {
 		EmbedModel:              getEnv("EMBED_MODEL", "nomic-embed-text"),
 		EmbedHost:               getEnv("EMBED_HOST", getEnv("LLM_HOST", "localhost")),
 		EmbedPort:               getEnv("EMBED_PORT", getEnv("LLM_PORT", "11434")),
+		WebSearchEnabled:        webSearchEnabled,
+		WebSearchProvider:       getEnv("WEB_SEARCH_PROVIDER", "tavily"),
+		WebSearchAPIKey:         getEnv("WEB_SEARCH_API_KEY", ""),
+		WebSearchBaseURL:        strings.TrimRight(getEnv("WEB_SEARCH_BASE_URL", "https://api.tavily.com"), "/"),
+		WebSearchTimeout:        webSearchTimeout,
+		WebSearchMaxResults:     webSearchMaxResults,
 		DBHost:                  getEnv("DB_HOST", "localhost"),
 		DBPort:                  getEnv("DB_PORT", "5432"),
 		DBName:                  getEnv("DB_NAME", "orchestrator"),
@@ -347,6 +373,28 @@ func (c *AppConfig) Validate() error {
 	}
 	if c.RateLimitPerMin <= 0 {
 		errs = append(errs, fmt.Errorf("RATE_LIMIT_PER_MINUTE must be greater than zero"))
+	}
+	if c.WebSearchEnabled {
+		if !isSupportedWebSearchProvider(c.WebSearchProvider) {
+			errs = append(errs, fmt.Errorf("WEB_SEARCH_PROVIDER must be one of: tavily"))
+		}
+		if strings.TrimSpace(c.WebSearchAPIKey) == "" {
+			errs = append(errs, fmt.Errorf("WEB_SEARCH_API_KEY is required when WEB_SEARCH_ENABLED=true"))
+		}
+		if strings.TrimSpace(c.WebSearchBaseURL) == "" {
+			errs = append(errs, fmt.Errorf("WEB_SEARCH_BASE_URL is required when WEB_SEARCH_ENABLED=true"))
+		} else if _, err := url.ParseRequestURI(c.WebSearchBaseURL); err != nil {
+			errs = append(errs, fmt.Errorf("WEB_SEARCH_BASE_URL must be a valid URL"))
+		}
+	}
+	if c.WebSearchTimeout <= 0 {
+		errs = append(errs, fmt.Errorf("WEB_SEARCH_TIMEOUT must be greater than zero"))
+	}
+	if c.WebSearchMaxResults <= 0 {
+		errs = append(errs, fmt.Errorf("WEB_SEARCH_MAX_RESULTS must be greater than zero"))
+	}
+	if c.WebSearchMaxResults > 10 {
+		errs = append(errs, fmt.Errorf("WEB_SEARCH_MAX_RESULTS must be less than or equal to 10"))
 	}
 	if c.CORSAllowCredentials && containsWildcardOrigin(c.AllowedOrigins) {
 		errs = append(errs, fmt.Errorf("CORS_ALLOW_CREDENTIALS cannot be true when ALLOWED_ORIGINS contains *"))
@@ -528,6 +576,15 @@ func isSupportedLLMBackend(backend string) bool {
 func isSupportedOCREngine(engine string) bool {
 	switch strings.ToLower(strings.TrimSpace(engine)) {
 	case "tesseract", "ollama", "disabled":
+		return true
+	default:
+		return false
+	}
+}
+
+func isSupportedWebSearchProvider(provider string) bool {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "tavily":
 		return true
 	default:
 		return false

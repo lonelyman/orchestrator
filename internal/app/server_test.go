@@ -40,3 +40,29 @@ func TestConfigurePostgresPool(t *testing.T) {
 		t.Fatalf("expected health period 30s, got %s", poolConfig.HealthCheckPeriod)
 	}
 }
+
+func TestBuildWebSearchAdapter_Disabled(t *testing.T) {
+	adapter, err := buildWebSearchAdapter(&config.AppConfig{WebSearchEnabled: false})
+	if err != nil {
+		t.Fatalf("buildWebSearchAdapter() error = %v", err)
+	}
+	if adapter != nil {
+		t.Fatalf("expected nil adapter")
+	}
+}
+
+func TestBuildWebSearchAdapter_Tavily(t *testing.T) {
+	adapter, err := buildWebSearchAdapter(&config.AppConfig{
+		WebSearchEnabled:  true,
+		WebSearchProvider: "tavily",
+		WebSearchBaseURL:  "https://api.tavily.com",
+		WebSearchAPIKey:   "tvly-test",
+		WebSearchTimeout:  time.Second,
+	})
+	if err != nil {
+		t.Fatalf("buildWebSearchAdapter() error = %v", err)
+	}
+	if adapter == nil {
+		t.Fatalf("expected adapter")
+	}
+}

@@ -23,6 +23,7 @@ import (
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/migrations"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/session"
 	"github.com/enterprise-ai/orchestrator/internal/infrastructure/vector"
+	"github.com/enterprise-ai/orchestrator/internal/infrastructure/websearch"
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -81,6 +82,16 @@ func New(ctx context.Context, cfg *config.AppConfig) (*Server, error) {
 
 	ragEngine := rag.New(embedderAdapter, vectorAdapter)
 	orch := orchestrator.New(llmAdapter, ragEngine, sessionAdapter, cfg.SystemPrompt)
+	webSearchAdapter, err := buildWebSearchAdapter(cfg)
+	if err != nil {
+		sqlDB.Close()
+		pool.Close()
+		return nil, err
+	}
+	if webSearchAdapter != nil {
+		orch.RegisterTool(orchestrator.NewWebSearchTool(webSearchAdapter, cfg.WebSearchMaxResults))
+		slog.Info("web search tool registered", "provider", cfg.WebSearchProvider, "max_results", cfg.WebSearchMaxResults)
+	}
 
 	ldapAdapter := auth.NewLDAPAdapter(cfg.ADServer, cfg.ADPort, cfg.ADBaseDN, cfg.ADDomain, cfg.DevMode, cfg.DevUsername, cfg.DevPassword)
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.JWTExpiry)
@@ -107,6 +118,18 @@ func New(ctx context.Context, cfg *config.AppConfig) (*Server, error) {
 	})
 
 	return &Server{App: fiberApp, pool: pool, sqlDB: sqlDB, audit: asyncAuditAdapter}, nil
+}
+
+func buildWebSearchAdapter(cfg *config.AppConfig) (ports.WebSearchPort, error) {
+	if !cfg.WebSearchEnabled {
+		return nil, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(cfg.WebSearchProvider)) {
+	case "tavily":
+		return websearch.NewTavilyAdapter(cfg.WebSearchBaseURL, cfg.WebSearchAPIKey, cfg.WebSearchTimeout), nil
+	default:
+		return nil, fmt.Errorf("unsupported WEB_SEARCH_PROVIDER: %s", cfg.WebSearchProvider)
+	}
 }
 
 func (s *Server) Close() {

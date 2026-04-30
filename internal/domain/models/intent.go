@@ -10,6 +10,9 @@ const (
 	// IntentMCP ใช้เมื่อต้องการดึงข้อมูลจาก Database
 	IntentMCP Intent = "mcp"
 
+	// IntentWebSearch ใช้เมื่อต้องการข้อมูลปัจจุบันจากเว็บ
+	IntentWebSearch Intent = "web_search"
+
 	// IntentDirect ใช้เมื่อตอบตรงๆ ได้เลย
 	IntentDirect Intent = "direct"
 )

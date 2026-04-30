@@ -11,6 +11,7 @@ import (
 
 	"github.com/enterprise-ai/orchestrator/internal/core/rag"
 	"github.com/enterprise-ai/orchestrator/internal/domain/models"
+	"github.com/enterprise-ai/orchestrator/internal/domain/ports"
 )
 
 const (
@@ -18,6 +19,7 @@ const (
 	agentToolTimeout        = 15 * time.Second
 	agentMaxToolResultRunes = 8_000
 	ragSearchToolName       = "rag_search"
+	webSearchToolName       = "web_search"
 	defaultRAGSearchLimit   = 3
 	maxRAGSearchLimit       = 5
 )
@@ -63,6 +65,28 @@ func (r *ToolRegistry) Definitions() []models.Tool {
 		defs = append(defs, r.tools[name].Definition)
 	}
 	return defs
+}
+
+func (r *ToolRegistry) DefinitionsByName(names ...string) []models.Tool {
+	if r == nil || len(names) == 0 {
+		return nil
+	}
+	defs := make([]models.Tool, 0, len(names))
+	for _, name := range names {
+		tool, ok := r.tools[strings.TrimSpace(name)]
+		if ok {
+			defs = append(defs, tool.Definition)
+		}
+	}
+	return defs
+}
+
+func (r *ToolRegistry) Has(name string) bool {
+	if r == nil {
+		return false
+	}
+	_, ok := r.tools[strings.TrimSpace(name)]
+	return ok
 }
 
 func (r *ToolRegistry) Execute(ctx context.Context, call models.ToolCall) (models.ToolResult, error) {
@@ -144,6 +168,91 @@ func NewRAGSearchTool(engine *rag.RAGEngine) RegisteredTool {
 					"query":     query,
 					"documents": items,
 					"count":     len(items),
+				},
+			}, nil
+		},
+	}
+}
+
+func NewWebSearchTool(searcher ports.WebSearchPort, maxResults int) RegisteredTool {
+	if maxResults <= 0 {
+		maxResults = 5
+	}
+	if maxResults > 10 {
+		maxResults = 10
+	}
+
+	return RegisteredTool{
+		Definition: models.Tool{
+			Name:        webSearchToolName,
+			Description: "Search the public web for current or recent information. Use this for news, latest events, current facts, and internet lookups. Return sources.",
+			Parameters: map[string]models.ToolParam{
+				"query": {
+					Type:        "string",
+					Description: "The web search query in the user's language.",
+					Required:    true,
+				},
+				"max_results": {
+					Type:        "integer",
+					Description: "Maximum number of search results to return. Default 5, maximum 10.",
+					Required:    false,
+				},
+				"topic": {
+					Type:        "string",
+					Description: "Search topic. Use 'news' for current news, otherwise 'general'.",
+					Required:    false,
+				},
+			},
+		},
+		Timeout: agentToolTimeout,
+		Execute: func(ctx context.Context, call models.ToolCall) (models.ToolResult, error) {
+			if searcher == nil {
+				return models.ToolResult{}, fmt.Errorf("web search not configured")
+			}
+			query, _ := call.Arguments["query"].(string)
+			query = strings.TrimSpace(query)
+			if query == "" {
+				return models.ToolResult{}, fmt.Errorf("query is required")
+			}
+
+			topic, _ := call.Arguments["topic"].(string)
+			topic = strings.TrimSpace(strings.ToLower(topic))
+			if topic == "" {
+				topic = "general"
+			}
+			limit := parseToolLimit(call.Arguments["max_results"], maxResults, 10)
+
+			results, err := searcher.Search(ctx, query, models.WebSearchOptions{
+				MaxResults: limit,
+				Topic:      topic,
+				SafeSearch: true,
+			})
+			if err != nil {
+				return models.ToolResult{}, err
+			}
+
+			items := make([]map[string]any, 0, len(results))
+			for _, result := range results {
+				item := map[string]any{
+					"title":   result.Title,
+					"url":     result.URL,
+					"snippet": result.Snippet,
+					"source":  result.Source,
+					"score":   result.Score,
+				}
+				if !result.PublishedAt.IsZero() {
+					item["published_at"] = result.PublishedAt.Format(time.RFC3339)
+				}
+				items = append(items, item)
+			}
+
+			return models.ToolResult{
+				ToolName: webSearchToolName,
+				Data: map[string]any{
+					"query":   query,
+					"topic":   topic,
+					"results": items,
+					"count":   len(items),
 				},
 			}, nil
 		},

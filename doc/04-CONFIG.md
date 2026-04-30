@@ -59,6 +59,14 @@ EMBED_HOST=host.docker.internal
 EMBED_PORT=11434
 EMBED_MODEL=nomic-embed-text-v2-moe
 
+# Web Search
+WEB_SEARCH_ENABLED=false
+WEB_SEARCH_PROVIDER=tavily
+WEB_SEARCH_API_KEY=
+WEB_SEARCH_BASE_URL=https://api.tavily.com
+WEB_SEARCH_TIMEOUT=10s
+WEB_SEARCH_MAX_RESULTS=5
+
 # OCR
 OCR_ENGINE=ollama
 OCR_HOST=host.docker.internal

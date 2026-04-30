@@ -28,9 +28,43 @@ var mcpKeywords = []string{
 	"พนักงาน", "เงินเดือน", "โบนัส", "ค่าจ้าง",
 }
 
+// strongWebSearchKeywords คำที่บ่งบอกชัดว่าต้องค้นเว็บ
+var strongWebSearchKeywords = []string{
+	"ข่าว",
+	"อินเทอร์เน็ต", "internet", "เว็บ", "website", "web",
+	"ค้นหา", "search", "google",
+}
+
+// recencyWebSearchKeywords คำที่บ่งบอกข้อมูลสด แต่ต้องให้ internal DB/RAG keywords ชนะก่อน
+var recencyWebSearchKeywords = []string{
+	"ล่าสุด", "วันนี้", "ตอนนี้", "ปัจจุบัน",
+}
+
 // Classify วิเคราะห์คำถามและตัดสินใจ Intent
 func (c *Classifier) Classify(query string) models.IntentResult {
 	query = strings.ToLower(query)
+
+	// เช็คคำที่บอกชัดว่าต้องค้นเว็บก่อน
+	for _, kw := range strongWebSearchKeywords {
+		if strings.Contains(query, strings.ToLower(kw)) {
+			return models.IntentResult{
+				Intent:     models.IntentWebSearch,
+				Confidence: 0.8,
+				Reason:     "matched keyword: " + kw,
+			}
+		}
+	}
+
+	// เช็ค MCP keywords ก่อน recency เพื่อให้คำถาม internal เช่น "ยอดขายวันนี้" ยังเข้าฐานข้อมูล
+	for _, kw := range mcpKeywords {
+		if strings.Contains(query, strings.ToLower(kw)) {
+			return models.IntentResult{
+				Intent:     models.IntentMCP,
+				Confidence: 0.8,
+				Reason:     "matched keyword: " + kw,
+			}
+		}
+	}
 
 	// เช็ค RAG keywords
 	for _, kw := range ragKeywords {
@@ -43,11 +77,11 @@ func (c *Classifier) Classify(query string) models.IntentResult {
 		}
 	}
 
-	// เช็ค MCP keywords
-	for _, kw := range mcpKeywords {
+	// เช็ค recency keywords หลัง internal keywords
+	for _, kw := range recencyWebSearchKeywords {
 		if strings.Contains(query, strings.ToLower(kw)) {
 			return models.IntentResult{
-				Intent:     models.IntentMCP,
+				Intent:     models.IntentWebSearch,
 				Confidence: 0.8,
 				Reason:     "matched keyword: " + kw,
 			}

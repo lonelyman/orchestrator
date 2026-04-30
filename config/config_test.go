@@ -31,6 +31,12 @@ var configEnvKeys = []string{
 	"EMBED_HOST",
 	"EMBED_PORT",
 	"EMBED_MODEL",
+	"WEB_SEARCH_ENABLED",
+	"WEB_SEARCH_PROVIDER",
+	"WEB_SEARCH_API_KEY",
+	"WEB_SEARCH_BASE_URL",
+	"WEB_SEARCH_TIMEOUT",
+	"WEB_SEARCH_MAX_RESULTS",
 	"OCR_ENGINE",
 	"OCR_HOST",
 	"OCR_PORT",
@@ -124,6 +130,15 @@ func TestLoad_AllowsDevDefaults(t *testing.T) {
 	}
 	if cfg.EmbedHost != cfg.LLMHost || cfg.EmbedPort != cfg.LLMPort {
 		t.Fatalf("expected embed endpoint to default to llm endpoint, got %s:%s vs %s:%s", cfg.EmbedHost, cfg.EmbedPort, cfg.LLMHost, cfg.LLMPort)
+	}
+	if cfg.WebSearchEnabled {
+		t.Fatalf("expected web search disabled by default")
+	}
+	if cfg.WebSearchProvider != "tavily" || cfg.WebSearchBaseURL != "https://api.tavily.com" {
+		t.Fatalf("unexpected default web search config: provider=%q baseURL=%q", cfg.WebSearchProvider, cfg.WebSearchBaseURL)
+	}
+	if cfg.WebSearchTimeout != 10*time.Second || cfg.WebSearchMaxResults != 5 {
+		t.Fatalf("unexpected web search limits: timeout=%s max=%d", cfg.WebSearchTimeout, cfg.WebSearchMaxResults)
 	}
 	if cfg.OCREngine != "tesseract" {
 		t.Fatalf("expected default OCR engine tesseract, got %q", cfg.OCREngine)
@@ -263,6 +278,62 @@ func TestLoad_RejectsUnsupportedOCREngine(t *testing.T) {
 	}
 }
 
+func TestLoad_AcceptsWebSearchConfig(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("DEV_MODE", "true")
+	t.Setenv("WEB_SEARCH_ENABLED", "true")
+	t.Setenv("WEB_SEARCH_PROVIDER", "tavily")
+	t.Setenv("WEB_SEARCH_API_KEY", "tvly-test")
+	t.Setenv("WEB_SEARCH_BASE_URL", "https://api.tavily.com/")
+	t.Setenv("WEB_SEARCH_TIMEOUT", "12s")
+	t.Setenv("WEB_SEARCH_MAX_RESULTS", "7")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.WebSearchEnabled {
+		t.Fatalf("expected web search enabled")
+	}
+	if cfg.WebSearchProvider != "tavily" || cfg.WebSearchAPIKey != "tvly-test" {
+		t.Fatalf("unexpected web search provider/key: %q %q", cfg.WebSearchProvider, cfg.WebSearchAPIKey)
+	}
+	if cfg.WebSearchBaseURL != "https://api.tavily.com" {
+		t.Fatalf("expected trimmed base URL, got %q", cfg.WebSearchBaseURL)
+	}
+	if cfg.WebSearchTimeout != 12*time.Second || cfg.WebSearchMaxResults != 7 {
+		t.Fatalf("unexpected web search limits: timeout=%s max=%d", cfg.WebSearchTimeout, cfg.WebSearchMaxResults)
+	}
+}
+
+func TestLoad_RejectsEnabledWebSearchWithoutAPIKey(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("DEV_MODE", "true")
+	t.Setenv("WEB_SEARCH_ENABLED", "true")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(err.Error(), "WEB_SEARCH_API_KEY") {
+		t.Fatalf("expected WEB_SEARCH_API_KEY error, got %v", err)
+	}
+}
+
+func TestLoad_RejectsInvalidWebSearchMaxResults(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("DEV_MODE", "true")
+	t.Setenv("WEB_SEARCH_MAX_RESULTS", "11")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(err.Error(), "WEB_SEARCH_MAX_RESULTS") {
+		t.Fatalf("expected WEB_SEARCH_MAX_RESULTS error, got %v", err)
+	}
+}
+
 func TestLoad_RejectsWeakProductionConfig(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv("DEV_MODE", "false")
@@ -302,6 +373,11 @@ func TestLoad_AcceptsProductionConfig(t *testing.T) {
 	t.Setenv("LLM_API_KEY", "test-key")
 	t.Setenv("EMBED_HOST", "embed.example.com")
 	t.Setenv("EMBED_PORT", "11435")
+	t.Setenv("WEB_SEARCH_ENABLED", "true")
+	t.Setenv("WEB_SEARCH_PROVIDER", "tavily")
+	t.Setenv("WEB_SEARCH_API_KEY", "tvly-test")
+	t.Setenv("WEB_SEARCH_TIMEOUT", "15s")
+	t.Setenv("WEB_SEARCH_MAX_RESULTS", "6")
 	t.Setenv("OCR_ENGINE", "ollama")
 	t.Setenv("OCR_HOST", "ocr.example.com")
 	t.Setenv("OCR_PORT", "11436")
@@ -346,6 +422,12 @@ func TestLoad_AcceptsProductionConfig(t *testing.T) {
 	}
 	if cfg.EmbedHost != "embed.example.com" || cfg.EmbedPort != "11435" {
 		t.Fatalf("unexpected embed endpoint: %s:%s", cfg.EmbedHost, cfg.EmbedPort)
+	}
+	if !cfg.WebSearchEnabled || cfg.WebSearchProvider != "tavily" || cfg.WebSearchAPIKey != "tvly-test" {
+		t.Fatalf("unexpected web search config: enabled=%v provider=%q key=%q", cfg.WebSearchEnabled, cfg.WebSearchProvider, cfg.WebSearchAPIKey)
+	}
+	if cfg.WebSearchTimeout != 15*time.Second || cfg.WebSearchMaxResults != 6 {
+		t.Fatalf("unexpected web search limits: timeout=%s max=%d", cfg.WebSearchTimeout, cfg.WebSearchMaxResults)
 	}
 	if cfg.OCREngine != "ollama" || cfg.OCRHost != "ocr.example.com" || cfg.OCRPort != "11436" {
 		t.Fatalf("unexpected OCR endpoint: engine=%q endpoint=%s:%s", cfg.OCREngine, cfg.OCRHost, cfg.OCRPort)

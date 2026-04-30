@@ -43,6 +43,13 @@ func New(llm ports.LLMPort, rag *rag.RAGEngine, session ports.SessionPort, syste
 	}
 }
 
+func (o *Orchestrator) RegisterTool(tool RegisteredTool) {
+	if o.tools == nil {
+		o.tools = NewToolRegistry()
+	}
+	o.tools.Register(tool)
+}
+
 func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string, models.Intent, error) {
 	if len(req.Messages) == 0 {
 		return "", models.IntentDirect, fmt.Errorf("messages is required")
@@ -78,6 +85,11 @@ func (o *Orchestrator) Chat(ctx context.Context, req models.ChatRequest) (string
 	switch intentResult.Intent {
 	case models.IntentRAG:
 		systemContent += "\n\nFor questions about uploaded organization documents, use the rag_search tool before answering. Answer only from tool results. If no matching documents are returned, say in Thai that no matching information was found in uploaded documents."
+	case models.IntentWebSearch:
+		if o.tools == nil || !o.tools.Has(webSearchToolName) {
+			return "ขณะนี้ยังไม่ได้เปิดใช้งาน web search จึงไม่สามารถค้นหาข้อมูลปัจจุบันจากอินเทอร์เน็ตได้", intentResult.Intent, nil
+		}
+		systemContent += "\n\nFor questions about current events, recent facts, news, or internet lookups, use the web_search tool before answering. Cite the source URLs from the tool results. If no results are returned, say in Thai that no current web result was found."
 	case models.IntentMCP:
 		slog.Info("mcp intent - not connected yet")
 	case models.IntentDirect:
@@ -176,7 +188,9 @@ func (o *Orchestrator) agentTools(intentType models.Intent) []models.Tool {
 	}
 	switch intentType {
 	case models.IntentRAG:
-		return o.tools.Definitions()
+		return o.tools.DefinitionsByName(ragSearchToolName)
+	case models.IntentWebSearch:
+		return o.tools.DefinitionsByName(webSearchToolName)
 	default:
 		return nil
 	}

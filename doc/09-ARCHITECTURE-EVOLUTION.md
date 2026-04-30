@@ -60,29 +60,35 @@ internal/
 
 ## ❌ Gap ที่ต้องเติมเพื่อรองรับ 5 use cases
 
-### Gap A — Web Search Port ยังไม่มี
+### Gap A — Web Search Port 🟡 Partial Done
 
 **Use case:** "ถามข้อมูลปัจจุบันในเน็ต"
 
-**ปัญหาปัจจุบัน:** Intent classifier มีแค่ `RAG`, `MCP`, `Direct` — ไม่มี `WebSearch`
+**สถานะปัจจุบัน:**
+- เพิ่ม `IntentWebSearch`
+- เพิ่ม `WebSearchPort`
+- เพิ่ม `TavilyAdapter` ผ่าน `POST /search`
+- เพิ่ม `web_search` tool และ register เฉพาะเมื่อ `WEB_SEARCH_ENABLED=true`
+- ถ้ายังไม่เปิด web search ระบบจะตอบชัดเจนว่า web search ยังไม่ถูกเปิดใช้งาน
 
-**ออกแบบที่ควรเป็น:**
+**Contract ปัจจุบัน:**
 
 ```go
 // internal/domain/ports/web_search.go
 type WebSearchPort interface {
-    Search(ctx context.Context, query string, opts SearchOptions) ([]SearchResult, error)
+    Search(ctx context.Context, query string, opts models.WebSearchOptions) ([]models.WebSearchResult, error)
     HealthCheck(ctx context.Context) error
 }
 
-type SearchOptions struct {
+type WebSearchOptions struct {
     MaxResults int
+    Topic      string         // "general" / "news"
     Recency    time.Duration  // เช่น "ข่าวใน 24 ชม."
     Region     string         // "TH" / "global"
     SafeSearch bool
 }
 
-type SearchResult struct {
+type WebSearchResult struct {
     Title    string
     URL      string
     Snippet  string
@@ -108,7 +114,7 @@ const (
 )
 ```
 
-**Caching strategy:** web search results cache 1 ชม. ใน Redis/Postgres → ลด cost + เร็วขึ้น
+**ยังไม่ได้ทำ:** cache ผล search 1 ชม. ใน Redis/Postgres → ลด cost + เร็วขึ้น
 
 ---
 
@@ -256,9 +262,9 @@ type LLMChatResponse struct {
 
 **Tools ที่ register ใน orchestrator:**
 - `rag_search(query, limit)` — RAG ✅
+- `web_search(query, max_results, topic)` — Web Search ✅ เมื่อ `WEB_SEARCH_ENABLED=true`
 - `query_database(metric, filters)` — Analytics
 - `query_sales(query)` — MCP SQL Server
-- `web_search(query)` — Web Search
 - `get_current_time()` — utility
 
 **ข้อดี:**

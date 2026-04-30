@@ -138,3 +138,81 @@ func TestChat_RAGIntentFallsBackWhenModelDoesNotCallTool(t *testing.T) {
 		t.Fatalf("expected fallback RAG context, got %q", llm.chatCalls[0][0].Content)
 	}
 }
+
+type fakeWebSearch struct {
+	results []models.WebSearchResult
+}
+
+func (f fakeWebSearch) Search(context.Context, string, models.WebSearchOptions) ([]models.WebSearchResult, error) {
+	return f.results, nil
+}
+
+func (f fakeWebSearch) HealthCheck(context.Context) error {
+	return nil
+}
+
+func TestChat_WebSearchIntentUsesWebSearchTool(t *testing.T) {
+	llm := &fakeLLM{
+		toolResponses: []models.LLMChatResponse{
+			{
+				ToolCalls: []models.ToolCall{{
+					ToolName: webSearchToolName,
+					Arguments: map[string]any{
+						"query":       "ข่าว AI ล่าสุด",
+						"max_results": float64(1),
+						"topic":       "news",
+					},
+				}},
+				FinishReason: "tool_calls",
+			},
+			{Content: "คำตอบจากเว็บพร้อมแหล่งที่มา"},
+		},
+	}
+	orch := New(llm, nil, nil, "ตอบภาษาไทย")
+	orch.RegisterTool(NewWebSearchTool(fakeWebSearch{results: []models.WebSearchResult{{
+		Title:   "AI News",
+		URL:     "https://example.com/ai",
+		Snippet: "latest AI news",
+		Source:  "example.com",
+	}}}, 3))
+
+	result, intentType, err := orch.Chat(context.Background(), models.ChatRequest{
+		Messages: []models.ChatMessage{{Role: "user", Content: "ข่าว AI ล่าสุดคืออะไร"}},
+	})
+	if err != nil {
+		t.Fatalf("Chat() error = %v", err)
+	}
+	if intentType != models.IntentWebSearch {
+		t.Fatalf("expected web search intent, got %s", intentType)
+	}
+	if result != "คำตอบจากเว็บพร้อมแหล่งที่มา" {
+		t.Fatalf("unexpected result: %q", result)
+	}
+	if len(llm.chatWithToolsCalls) != 2 {
+		t.Fatalf("expected two ChatWithTools calls, got %d", len(llm.chatWithToolsCalls))
+	}
+	if len(llm.chatWithToolsCalls[0].Tools) != 1 || llm.chatWithToolsCalls[0].Tools[0].Name != webSearchToolName {
+		t.Fatalf("expected web_search tool definition, got %+v", llm.chatWithToolsCalls[0].Tools)
+	}
+}
+
+func TestChat_WebSearchIntentReturnsDisabledMessageWhenToolUnavailable(t *testing.T) {
+	llm := &fakeLLM{chatResponse: "should not be used"}
+	orch := New(llm, nil, nil, "ตอบภาษาไทย")
+
+	result, intentType, err := orch.Chat(context.Background(), models.ChatRequest{
+		Messages: []models.ChatMessage{{Role: "user", Content: "ข่าวล่าสุดวันนี้"}},
+	})
+	if err != nil {
+		t.Fatalf("Chat() error = %v", err)
+	}
+	if intentType != models.IntentWebSearch {
+		t.Fatalf("expected web search intent, got %s", intentType)
+	}
+	if !strings.Contains(result, "ยังไม่ได้เปิดใช้งาน web search") {
+		t.Fatalf("unexpected result: %q", result)
+	}
+	if len(llm.chatCalls) != 0 || len(llm.chatWithToolsCalls) != 0 {
+		t.Fatalf("expected no LLM calls, got chat=%d tool=%d", len(llm.chatCalls), len(llm.chatWithToolsCalls))
+	}
+}
