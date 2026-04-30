@@ -21,6 +21,7 @@
 | `09-ARCHITECTURE-EVOLUTION.md` | PoC Ollama → Production vLLM Architecture Plan | ✅ 2026-04-29 |
 | `10-GREENFIELD-STACK.md` | Industry-Standard Stack (ถ้าเริ่มใหม่จาก 0) | ✅ 2026-04-29 |
 | `11-REBUILD-CHECKLIST.md` | Checklist สิ่งที่ PoC ทำไปแล้ว + ข้อควรระวังถ้า rebuild | ✅ 2026-04-30 |
+| `12-PYTHON-REBUILD-SPEC.md` | Spec สำหรับ rebuild ด้วย FastAPI + LangGraph | ✅ 2026-04-30 |
 
 ---
 
