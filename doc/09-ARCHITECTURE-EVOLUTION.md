@@ -216,13 +216,23 @@ type LLMChatResponse struct {
 }
 ```
 
-**ยังไม่ทำใน step นี้:** agent loop ยังไม่ execute tool จริง ต้องทำ Gap D ต่อ
+**ถัดไป:** ขยาย Agent loop ให้รองรับ tools อื่นนอกเหนือจาก RAG เช่น Web Search และ Analytics
 
 ---
 
-### Gap D — Orchestrator ยังเป็น Simple Router
+### Gap D — Orchestrator ยังเป็น Simple Router 🟡 Partial Done
 
-**ปัจจุบัน:** intent classify → ถ้า RAG เติม context → ส่ง LLM ครั้งเดียว
+**สถานะปัจจุบัน:** non-streaming RAG intent ใช้ Agent loop แล้ว:
+- มี `ToolRegistry` สำหรับ register tool definition + executor
+- มี `rag_search(query, limit)` เป็น tool แรก
+- จำกัด loop ที่ 3 iterations
+- จำกัด tool timeout ที่ 15s และ truncate tool result ที่ 8,000 ตัวอักษร
+- ถ้า model ไม่เรียก tool ใน RAG intent จะ fallback เป็น RAG context injection แบบเดิมเพื่อกัน regression
+
+**ยังไม่ได้ทำ:**
+- Streaming ยังใช้ flow เดิม
+- Web Search / Analytics / MCP ยังไม่ได้ register เป็น tools
+- ยังไม่มี env สำหรับ tune `max_iterations`, `tool_timeout`
 
 **ปัญหา:** flow แบบนี้ **agent หลาย step ไม่ได้** เช่น:
 - ถาม "ยอดขายเดือนนี้เป็นอย่างไร เทียบกับ industry benchmark?"
@@ -245,7 +255,7 @@ type LLMChatResponse struct {
 ```
 
 **Tools ที่ register ใน orchestrator:**
-- `search_documents(query)` — RAG
+- `rag_search(query, limit)` — RAG ✅
 - `query_database(metric, filters)` — Analytics
 - `query_sales(query)` — MCP SQL Server
 - `web_search(query)` — Web Search
